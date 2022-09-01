@@ -3,7 +3,6 @@ model:
   init_args:
     weight_decay: 1e-4
     lr: 1e-4
-    n_epochs: 1
     n_transforms: 256
     feature_dim: 32
     num_hidden_nodes: 8
@@ -12,3 +11,5 @@ model:
     eps: 0
     lamb: 0.1
     margin: 1
+trainer:
+  max_epochs: 1

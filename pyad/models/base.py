@@ -42,7 +42,6 @@ class BaseModule(nn.Module):
             self,
             in_features: int,
             n_instances: int,
-            n_epochs: int,
             lr: float,
             device: str = None,
             weight_decay: float = 0.,
@@ -51,7 +50,6 @@ class BaseModule(nn.Module):
         super(BaseModule, self).__init__()
         self.in_features = in_features
         self.n_instances = n_instances
-        self.n_epochs = n_epochs
         self.lr = lr
         self.weight_decay = weight_decay
         self.optimizer = None
@@ -103,7 +101,6 @@ class BaseModule(nn.Module):
         shared_params = {
             "lr": self.lr,
             "weight_decay": self.weight_decay,
-            "n_epochs": self.n_epochs,
             "device": self.device
         }
         specific_params = self.get_hparams()
@@ -111,12 +108,6 @@ class BaseModule(nn.Module):
             **shared_params,
             **specific_params
         )
-
-    def fit(self, dataset):
-        # set optimizer
-        self.optimizer, self.scheduler = self.configure_optimizers()
-        # fit model on given dataset
-        self.fit_impl(dataset)
 
     def eval_step(self):
         self.eval()
@@ -139,29 +130,3 @@ class BaseModule(nn.Module):
                 all_labels.extend(labels)
         self.train(mode=True)
         return np.array(all_scores), np.array(all_ys, dtype=np.int8), np.array(all_labels)
-
-    def fit_impl(self, dataset: DataLoader):
-        self.on_before_fit(dataset)
-        # with trange(self.n_epochs) as t:
-        for epoch in range(self.n_epochs):
-            self.current_epoch = epoch
-            self.on_train_epoch_start()
-            with tqdm(dataset, leave=False) as t_epoch:
-                t_epoch.set_description(f"Epoch {epoch + 1}")
-                for X, y, full_labels in t_epoch:
-                    y = y.to(self.device).float()
-                    X = X.to(self.device).float()
-                    # clear gradients
-                    self.optimizer.zero_grad()
-                    # compute forward pass
-                    loss = self.training_step(X, y, full_labels)
-                    # compute backward pass
-                    loss.backward()
-                    # update parameters
-                    self.optimizer.step()
-                    if self.scheduler:
-                        self.scheduler.step()
-                    # log loss
-                    t_epoch.set_postfix(loss='{:.6f}'.format(loss.item()))
-                    t_epoch.update()
-            self.on_train_epoch_end()

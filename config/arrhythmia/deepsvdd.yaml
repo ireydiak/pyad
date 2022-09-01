@@ -8,7 +8,6 @@ model:
     eps: 0.1
     weight_decay: 1e-4
     lr: 1e-4
-    n_epochs: 200
 data:
   init_args:
     scaler: minmax

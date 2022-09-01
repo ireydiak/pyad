@@ -7,4 +7,3 @@ model:
     score_metric: energy
     weight_decay: 1e-4
     lr: 1e-4
-    n_epochs: 200

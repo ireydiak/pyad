@@ -10,4 +10,3 @@ model:
     ascent_num_steps: 50
     weight_decay: 0.0
     lr: 1e-3
-    n_epochs: 200
