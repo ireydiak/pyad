@@ -148,10 +148,10 @@ class ModuleTrainer:
                     loss.backward()
                     # update parameters
                     self.optimizer.step()
-                    if self.scheduler:
+                    if self.scheduler is not None:
                         self.scheduler.step()
                     # validation step and log
-                    if validation_ldr is not None and self.val_check_interval and (epoch + 1) % self.val_check_interval == 0:
+                    if validation_ldr is not None and self.val_check_interval is not None and (epoch + 1) % self.val_check_interval == 0:
                         # compute score un validation set
                         test_scores, y_test_true, _ = model.predict(validation_ldr)
                         res, _ = score_recall_precision_w_threshold(
@@ -179,7 +179,8 @@ class ModuleTrainer:
             model = instantiate_class(init=model_cfg, n_instances=n_instances, in_features=in_features)
             # create optimizer and scheduler
             self.optimizer, self.scheduler = model.configure_optimizers()
-            train_ldr, test_ldr = data.loaders(seed=run + 1)
+            # select different normal samples for both training and test sets
+            train_ldr, test_ldr = data.loaders()
             # fit model on training data
             self._run_once(model, train_ldr=train_ldr, validation_ldr=test_ldr)
             # evaluate model on test set

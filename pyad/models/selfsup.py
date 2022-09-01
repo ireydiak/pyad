@@ -1,6 +1,7 @@
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
+import numpy as np
 
 from pyad.loss.criterion import TripletCenterLoss
 from pyad.models.base import BaseModule
@@ -10,13 +11,21 @@ from typing import List, Tuple
 
 
 def create_network(
-        input_dim: int, hidden_dims: list, bias=True, act_fn: nn.Module = nn.ReLU
+        input_dim: int,
+        hidden_dims: list,
+        bias: bool = True,
+        act_fn: nn.Module = nn.ReLU,
+        batch_norm: bool = False
 ) -> list:
     net_layers = []
     for i in range(len(hidden_dims) - 1):
         net_layers.append(
             nn.Linear(input_dim, hidden_dims[i], bias=bias)
         )
+        if batch_norm:
+            net_layers.append(
+                nn.BatchNorm1d(hidden_dims[i], affine=False)
+            )
         net_layers.append(
             act_fn()
         )
@@ -184,7 +193,9 @@ class GOAD(BaseModule):
 
 @MODEL_REGISTRY
 class NeuTraLAD(BaseModule):
-
+    """
+    *** Code largely inspired by the original repository: https://github.com/boschresearch/NeuTraL-AD/ ***
+    """
     def __init__(
             self,
             n_transforms: int,
@@ -201,6 +212,7 @@ class NeuTraLAD(BaseModule):
         self.temperature = temperature
         self.trans_hidden_dims = trans_hidden_dims
         self.enc_hidden_dims = enc_hidden_dims
+        self.latent_dim = enc_hidden_dims[-1]
         # Loss Module
         self.cosim = nn.CosineSimilarity()
         # Encoder and Transformation layers
@@ -233,51 +245,86 @@ class NeuTraLAD(BaseModule):
         if self.trans_hidden_dims[-1] != self.in_features:
             self.trans_hidden_dims.append(self.in_features)
         # Encoder
-        self.enc = nn.Sequential(
-            *create_network(self.in_features, self.enc_hidden_dims, bias=False)
+        enc_layers = create_network(
+            self.in_features, self.enc_hidden_dims,
+            bias=False, batch_norm=True
+        )
+        # for some reason, this NeuTraLAD performs better when the last layer is the activation function
+        # enc_layers = enc_layers[:-1]
+        enc = nn.Sequential(
+            *enc_layers
         ).to(self.device)
+        self.enc = enc
 
     def _create_masks(self):
         masks = nn.ModuleList()
         for k_i in range(self.n_transforms):
             layers = create_network(self.in_features, self.trans_hidden_dims, bias=False)
-            layers.append(nn.Sigmoid())
+            if self.trans_type == "mul":
+                layers.append(nn.Sigmoid())
             masks.append(
                 nn.Sequential(*layers).to(self.device)
             )
         return masks
 
     def forward(self, X: torch.Tensor):
-        X, y_true, full_labels = X
-        X = X.float()
-        scores = self.score(X)
-        return scores, y_true, full_labels
+        X_augmented = torch.empty(X.shape[0], self.n_transforms, X.shape[-1]).to(X.device)
+        for k in range(self.n_transforms):
+            mask = self.masks[k](X)
+            if self.trans_type == "mul":
+                X_augmented[:, k] = mask * X
+            else:
+                X_augmented[:, k] = mask + X
+        X_augmented = torch.cat((
+            X.unsqueeze(1), X_augmented
+        ), 1).to(self.device)
+        X_augmented = X_augmented.reshape(-1, X.shape[-1])
+
+        emb = self.enc(X_augmented)
+        # (batch_size, n_transforms + 1, latent_dim)
+        emb = emb.reshape(X.shape[0], self.n_transforms + 1, self.latent_dim)
+
+        return emb
 
     def compute_loss(self, outputs: torch.Tensor, **kwargs):
-        loss = self.score(outputs).mean()
-        return loss
+        logits = F.normalize(outputs, p=2, dim=-1)
+        emb_ori = logits[:, 0]
+        emb_trans = logits[:, 1:]
+        batch_size, n_transforms, latent_dim = logits.shape
+
+        sim_matrix = torch.exp(
+            torch.matmul(
+                logits,
+                logits.permute(0, 2, 1) / self.temperature
+            )
+        )
+        mask = (torch.ones_like(sim_matrix).to(self.device) - torch.eye(n_transforms).unsqueeze(0).to(
+            self.device)).bool()
+        sim_matrix = sim_matrix.masked_select(mask).view(batch_size, n_transforms, -1)
+        trans_matrix = sim_matrix[:, 1:].sum(-1)
+
+        pos_sim = torch.exp(
+            torch.sum(emb_trans * emb_ori.unsqueeze(1), -1) / self.temperature
+        )
+        K = n_transforms - 1
+        scale = 1 / np.abs(K * np.log(1. / K))
+
+        loss = torch.log(
+            trans_matrix - torch.log(pos_sim)
+        ) * scale
+
+        return loss.sum(1)
 
     def training_step(self, X: torch.Tensor, y: torch.Tensor = None, labels: torch.Tensor = None):
-        loss = self.compute_loss(X)
+        emb = self(X)
+        loss = self.compute_loss(emb)
+        loss = loss.mean()
         return loss
 
     def score(self, X: torch.Tensor, y: torch.Tensor = None, labels: torch.Tensor = None):
-        Xk = self._computeX_k(X)
-        Xk = Xk.permute((1, 0, 2))
-        Zk = self.enc(Xk)
-        Zk = F.normalize(Zk, dim=-1)
-        Z = self.enc(X)
-        Z = F.normalize(Z, dim=-1)
-        Hij = self._computeBatchH_ij(Zk)
-        Hx_xk = self._computeBatchH_x_xk(Z, Zk)
-
-        mask_not_k = (~torch.eye(self.n_transforms, dtype=torch.bool, device=self.device)).float()
-        numerator = Hx_xk
-        denominator = Hx_xk + (mask_not_k * Hij).sum(dim=2)
-        scores_V = numerator / denominator
-        score_V = (-torch.log(scores_V)).sum(dim=1)
-
-        return score_V
+        emb = self(X)
+        scores = self.compute_loss(emb)
+        return scores
 
     def _computeH_ij(self, Z):
         hij = F.cosine_similarity(Z.unsqueeze(1), Z.unsqueeze(0), dim=2)

@@ -1,7 +1,6 @@
 trainer:
   max_epochs: 200
   n_runs: 5
-#  val_check_interval: int = None,
-#  enable_checkpoints: bool = False,
-#  enable_early_stopping: bool = False,
-#  save_dir: str = None,
+  val_check_interval: 1
+#  enable_checkpoints: bool = False
+#  enable_early_stopping: bool = False
