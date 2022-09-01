@@ -53,7 +53,6 @@ class ModuleTrainer:
         self.save_dir = save_dir
         self.results_fname = results_fname
         self.multi_eval_results_fname = multi_eval_results_fname
-        # TODO: enable validation between epochs
         self.val_check_interval = val_check_interval
         # TODO: enable checkpoints
         self.enable_checkpoints = enable_checkpoints
@@ -130,12 +129,13 @@ class ModuleTrainer:
         # save dataframes
         return multi_eval_df, results_df
 
-    def _run_once(self, model: BaseModule, train_ldr: DataLoader):
+    def _run_once(self, model: BaseModule, train_ldr: DataLoader, validation_ldr: DataLoader = None):
+        # TODO: add validation logic after n epochs
         model.on_before_fit(train_ldr)
         for epoch in range(self.max_epochs):
             model.current_epoch = epoch
             model.on_train_epoch_start()
-            with tqdm(train_ldr, leave=False) as t_epoch:
+            with tqdm(train_ldr, leave=True) as t_epoch:
                 t_epoch.set_description(f"Epoch {epoch + 1}")
                 for X, y, full_labels in t_epoch:
                     y = y.to(model.device).float()
@@ -150,8 +150,16 @@ class ModuleTrainer:
                     self.optimizer.step()
                     if self.scheduler:
                         self.scheduler.step()
-                    # log loss
-                    t_epoch.set_postfix(loss='{:.6f}'.format(loss.item()))
+                    # validation step and log
+                    if validation_ldr is not None and self.val_check_interval and (epoch + 1) % self.val_check_interval == 0:
+                        # compute score un validation set
+                        test_scores, y_test_true, _ = model.predict(validation_ldr)
+                        res, _ = score_recall_precision_w_threshold(
+                            test_scores, y_test_true
+                        )
+                        t_epoch.set_postfix(loss='{:.6f}'.format(loss.item()), f_score=res["F1-Score"])
+                    else:
+                        t_epoch.set_postfix(loss='{:.6f}'.format(loss.item()))
                     t_epoch.update()
             model.on_train_epoch_end()
 
@@ -163,7 +171,6 @@ class ModuleTrainer:
         model = instantiate_class(init=model_cfg, n_instances=n_instances, in_features=in_features)
         model_name = model.print_name()
         dataset_name = data.name
-
         print("Running %d experiments with model %s on dataset %s" % (self.n_runs, model_name, dataset_name))
         now = dt.now().strftime("%d-%m-%Y_%H-%M-%S")
         # start training
@@ -174,9 +181,11 @@ class ModuleTrainer:
             self.optimizer, self.scheduler = model.configure_optimizers()
             train_ldr, test_ldr = data.loaders(seed=run + 1)
             # fit model on training data
-            self._run_once(model, train_ldr)
+            self._run_once(model, train_ldr=train_ldr, validation_ldr=test_ldr)
+            # evaluate model on test set
             f_score = self.test(model, train_ldr, test_ldr)
             print("\nRun {}: f_score={:.4f}".format(run + 1, f_score))
+        # aggregate and save results
         multi_eval_df, results_df = self.aggregate_results(model.get_params(), data.get_params())
         agg_results_fname = os.path.join(self.save_dir, self.results_fname)
         multi_eval_save_dir = os.path.join(self.save_dir, now)
