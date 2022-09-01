@@ -1,0 +1,21 @@
+model:
+  class_path: pyad.models.selfsup.NeuTraLAD
+  init_args:
+    weight_decay: 1e-4
+    lr: 1e-4
+    n_epochs: 200
+    n_transforms: 11
+    trans_type: res
+    temperature: 0.1
+    trans_hidden_dims:
+      - 24
+      - 6
+    enc_hidden_dims:
+      - 24
+      - 24
+      - 24
+      - 24
+      - 24
+data:
+  init_args:
+    batch_size: 128

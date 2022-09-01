@@ -1,0 +1,6 @@
+data:
+  class_path: pyad.datamanager.dataset.TabularDataset
+  init_args:
+    batch_size: 128
+    data_dir: C:\Users\verj2009\NRCAN\git\anomaly_detection_NRCAN\data\Arrhythmia\arrhythmia.npy
+    scaler: standard
