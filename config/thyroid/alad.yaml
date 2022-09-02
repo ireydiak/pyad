@@ -1,0 +1,17 @@
+model:
+  class_path: pyad.models.adversarial.ALAD
+  init_args:
+    weight_decay: 1e-4
+    lr: 1e-4
+    latent_dim: 32
+    out_dim: 128
+    negative_slope: 0.2
+data:
+  init_args:
+    batch_size: 32
+trainer:
+  class_path: pyad.models.trainer.AdversarialModuleTrainer
+  init_args:
+    max_epochs: 200
+    n_runs: 20
+    val_check_interval: 1

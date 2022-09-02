@@ -3,6 +3,7 @@ from typing import Tuple
 import numpy as np
 import os
 import pandas as pd
+import torch
 
 from datetime import datetime as dt
 from torch.utils.data import DataLoader
@@ -11,8 +12,10 @@ from pyad.datamanager.dataset import TabularDataset
 from pyad.models.base import BaseModule
 from pyad.utilities import instantiate_class
 from pyad.utilities import metrics
+from pyad.utilities.cli import TRAINER_REGISTRY
 
 
+@TRAINER_REGISTRY
 class ModuleTrainer:
     def __init__(
             self,
@@ -151,6 +154,19 @@ class ModuleTrainer:
         # save dataframes
         return multi_eval_df, results_df
 
+    def _forward(self, model: BaseModule, X: torch.Tensor, y: torch.Tensor) -> float:
+        # clear gradients
+        self.optimizer.zero_grad()
+        # compute forward pass
+        loss = model.training_step(X, y, None)
+        # compute backward pass
+        loss.backward()
+        # update parameters
+        self.optimizer.step()
+        if self.scheduler is not None:
+            self.scheduler.step()
+        return loss.item()
+
     def _run_once(self, model: BaseModule, train_ldr: DataLoader, validation_ldr: DataLoader = None):
         # TODO: add validation logic after n epochs
         model.on_before_fit(train_ldr)
@@ -162,16 +178,7 @@ class ModuleTrainer:
                 for X, y, full_labels in t_epoch:
                     y = y.to(model.device).float()
                     X = X.to(model.device).float()
-                    # clear gradients
-                    self.optimizer.zero_grad()
-                    # compute forward pass
-                    loss = model.training_step(X, y, full_labels)
-                    # compute backward pass
-                    loss.backward()
-                    # update parameters
-                    self.optimizer.step()
-                    if self.scheduler is not None:
-                        self.scheduler.step()
+                    loss = self._forward(model, X, y)
                     # validation step and log
                     if validation_ldr is not None and self.val_check_interval is not None and (epoch + 1) % self.val_check_interval == 0:
                         # compute score un validation set
@@ -179,9 +186,9 @@ class ModuleTrainer:
                         res, _ = metrics.score_recall_precision_w_threshold(
                             test_scores, y_test_true
                         )
-                        t_epoch.set_postfix(loss='{:.6f}'.format(loss.item()), f_score=res["F1-Score"])
+                        t_epoch.set_postfix(loss='{:.6f}'.format(loss), f_score=res["F1-Score"])
                     else:
-                        t_epoch.set_postfix(loss='{:.6f}'.format(loss.item()))
+                        t_epoch.set_postfix(loss='{:.6f}'.format(loss))
                     t_epoch.update()
             model.on_train_epoch_end()
 
@@ -239,6 +246,32 @@ class ModuleTrainer:
             normal_str_repr=normal_str_repr
         )
         return f_score
+
+
+@TRAINER_REGISTRY
+class AdversarialModuleTrainer(ModuleTrainer):
+    def _forward(self, model: BaseModule, X: torch.Tensor, y: torch.Tensor):
+        # get optimizers
+        g_opt, d_opt = self.optimizer
+
+        g_opt.zero_grad()
+        d_opt.zero_grad()
+
+        # compute forward pass
+        loss_g, loss_d = model.training_step(X, y)
+
+        loss_d.backward()
+        loss_g.backward()
+
+        # Optimize discriminator
+        d_opt.step()
+        # Optimize generator
+        g_opt.step()
+
+        if self.scheduler is not None:
+            self.scheduler.step()
+
+        return loss_d.item() + loss_g.item()
 
 
 def prepare_df(row_data: dict):

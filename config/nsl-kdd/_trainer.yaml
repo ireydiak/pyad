@@ -1,4 +1,6 @@
 trainer:
-  n_runs: 20
-  val_check_interval: 5
-  max_epochs: 100
+  class_path: pyad.models.trainer.ModuleTrainer
+  init_args:
+    n_runs: 20
+    val_check_interval: 5
+    max_epochs: 100

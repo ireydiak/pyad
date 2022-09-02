@@ -1,3 +1,4 @@
+from .adversarial import ALAD
 from .density import DAGMM, DSEBM, SOMDAGMM
 from .one_class import DeepSVDD, DROCC
 from .reconstruction import AutoEncoder, MemAE

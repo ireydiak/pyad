@@ -4,7 +4,7 @@ from typing import Type, Optional, Generator, List, Tuple, Any, Dict
 from types import ModuleType
 from jsonargparse import ActionConfigFile, ArgumentParser
 from pyad.datamanager.dataset import TabularDataset
-from pyad.models.trainer import ModuleTrainer
+from pyad.utilities import instantiate_class
 
 
 class _Registry(dict):
@@ -57,6 +57,7 @@ class _Registry(dict):
 
 MODEL_REGISTRY = _Registry()
 DATAMODULE_REGISTRY = _Registry()
+TRAINER_REGISTRY = _Registry()
 
 
 class CLI:
@@ -64,16 +65,21 @@ class CLI:
         self.parser = ArgumentParser()
         self.cfg = None
         self.parser.add_argument("--model", type=dict)
+        self.parser.add_argument("--trainer", type=dict)
         self.parser.add_class_arguments(TabularDataset, "data.init_args")
-        self.parser.add_class_arguments(ModuleTrainer, "trainer")
+        # self.parser.add_class_arguments(ModuleTrainer, "trainer.init_args")
         self.parser.add_argument("--config", action=ActionConfigFile)
 
     def __call__(self, *args, **kwargs):
         self.cfg = self.parser.parse_args()
         self.cfg = self.parser.instantiate_classes(self.cfg)
         model = MODEL_REGISTRY.get(self.cfg.model["class_path"])
+        trainer = TRAINER_REGISTRY.get(self.cfg.trainer["class_path"])
         if model is None:
             raise NotImplementedError("model %s unimplemented" % self.cfg.model["class_path"])
+        if trainer is None:
+            raise NotImplementedError("trainer %s unimplemented" % self.cfg.trainer["class_path"])
         data = self.cfg.data.init_args
         self.cfg.data = data
+        self.cfg.trainer = instantiate_class(init=self.cfg.trainer)
         return self.cfg
