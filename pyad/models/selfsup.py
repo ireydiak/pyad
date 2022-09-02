@@ -203,6 +203,7 @@ class NeuTraLAD(BaseModule):
             temperature: float,
             trans_hidden_dims: List[int],
             enc_hidden_dims: List[int],
+            use_batch_norm: bool = False,
             **kwargs
     ):
         super(NeuTraLAD, self).__init__(**kwargs)
@@ -213,6 +214,7 @@ class NeuTraLAD(BaseModule):
         self.trans_hidden_dims = trans_hidden_dims
         self.enc_hidden_dims = enc_hidden_dims
         self.latent_dim = enc_hidden_dims[-1]
+        self.use_batch_norm = use_batch_norm
         # Loss Module
         self.cosim = nn.CosineSimilarity()
         # Encoder and Transformation layers
@@ -229,7 +231,8 @@ class NeuTraLAD(BaseModule):
             trans_type=self.trans_type,
             temperature=self.temperature,
             trans_hidden_dims=self.trans_hidden_dims,
-            enc_hidden_dims=self.enc_hidden_dims
+            enc_hidden_dims=self.enc_hidden_dims,
+            use_batch_norm=self.use_batch_norm
         )
 
     def configure_optimizers(self) -> Tuple[torch.optim.Optimizer, StepLR]:
@@ -247,7 +250,7 @@ class NeuTraLAD(BaseModule):
         # Encoder
         enc_layers = create_network(
             self.in_features, self.enc_hidden_dims,
-            bias=False, batch_norm=True
+            bias=False, batch_norm=self.use_batch_norm
         )
         # for some reason, this NeuTraLAD performs better when the last layer is the activation function
         # enc_layers = enc_layers[:-1]

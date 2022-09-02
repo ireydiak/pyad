@@ -1,11 +1,14 @@
 import os
 
 import numpy as np
+import pandas as pd
 import scipy.io
 from torch.utils.data import Dataset, DataLoader
 from torch.utils.data.dataset import T_co
 from typing import Tuple
 from sklearn.preprocessing import MinMaxScaler, StandardScaler
+
+from pyad.utilities import math
 
 scaler_map = {
     "minmax": MinMaxScaler,
@@ -40,7 +43,13 @@ def train_test_split_normal_data(
         Optional argument to further subsample samples with where y == 0 (normal data)
 
     normal_str_repr: float
-        String representation of the label for normal samples (e.g. "Benign" or "normal")
+        String representation of the label for normal samples (e.g. "Benign", "normal" or "0")
+
+    seed: int
+        Set seeder for reproducibility
+
+    shuffle_normal: bool
+        Whether normal data should be shuffled or not (defaults to True)
     """
     assert 0. < normal_size <= 1., "`normal_size` parameter must be inclusively in the range (0, 1], got {:2.4f}".format(
         normal_size)
@@ -70,8 +79,8 @@ def train_test_split_normal_data(
         labels[y == 1]
     ))
     # sanity check: no attack labels associated with 0s and no normal labels associated with 1s
-    # for bin_y, label in zip(y_test, test_labels):
-    #     assert bin_y == 0 and label == normal_str_repr or bin_y == 1 and label != normal_str_repr
+    for bin_y, label in zip(y_test, test_labels):
+        assert bin_y == 0 and label == normal_str_repr or bin_y == 1 and label != normal_str_repr
     return X_train, X_test, y_test, test_labels
 
 
@@ -96,12 +105,19 @@ class TabularDataset(Dataset):
             data_dir: str,
             batch_size: int,
             scaler: str = None,
+            normal_size: float = 1.,
+            labels_col_name: str = None,
+            binary_labels_col_name: str = None,
+            normal_str_repr: str = None
     ):
         super(TabularDataset, self).__init__()
         self.data_dir = data_dir
         self.name = data_dir.split(os.path.sep)[-1].split(".")[0].lower()
         self.labels = np.array([])
         self.batch_size = batch_size
+        self.normal_size = normal_size
+        self.labels_col_name = labels_col_name
+        self.binary_labels_col_name = binary_labels_col_name
         if scaler is not None and scaler.lower() != "none":
             assert scaler.lower() in set(scaler_map.keys()), "unknown scaler %s, please use %s" % (
                 scaler, scaler_map.keys())
@@ -113,11 +129,11 @@ class TabularDataset(Dataset):
         self.y = data[:, -1]
         if self.labels.size == 0:
             self.labels = self.y
-
         self.shape = self.X.shape
         self.anomaly_ratio = (self.y == 1).sum() / len(self.X)
         self.n_instances = self.X.shape[0]
         self.in_features = self.X.shape[1]
+        self.normal_str_repr = normal_str_repr or math.get_most_recurrent(self.labels)
 
     def __len__(self):
         return len(self.X)
@@ -129,6 +145,7 @@ class TabularDataset(Dataset):
         return {
             "scaler": self.scaler.__class__.__name__,
             "batch_size": self.batch_size,
+            "normal_size": self.normal_size,
             "data_dir": self.data_dir
         }
 
@@ -138,6 +155,17 @@ class TabularDataset(Dataset):
         elif path.endswith(".mat"):
             data = scipy.io.loadmat(path)
             data = np.concatenate((data['X'], data['y']), axis=1)
+        elif path.endswith(".csv"):
+            df = pd.read_csv(path)
+            labels = df[self.labels_col_name].to_numpy()
+            binary_labels = df[self.binary_labels_col_name].to_numpy(dtype=np.int8)
+            data = df.drop([self.labels_col_name, self.binary_labels_col_name], axis=1).to_numpy()
+            data = np.concatenate((
+                data, np.expand_dims(binary_labels, 1)
+            ), axis=1)
+            self.labels = labels
+            assert np.isnan(data).sum() == 0, "detected nan values"
+            assert data[data < 0].sum() == 0, "detected negative values"
         else:
             raise RuntimeError(f"Could not open {path}. Dataset can only read .npz and .mat files.")
         return data
@@ -150,7 +178,7 @@ class TabularDataset(Dataset):
     ) -> (DataLoader, DataLoader):
         # train,test split
         X_train, X_test, y_test, test_labels = train_test_split_normal_data(
-            self.X, self.y, self.labels, seed=seed
+            self.X, self.y, self.labels, seed=seed, normal_str_repr=self.normal_str_repr
         )
         # normalize data
         if self.scaler:

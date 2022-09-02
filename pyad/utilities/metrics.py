@@ -95,19 +95,18 @@ def per_class_accuracy(y_true: np.ndarray, y_pred: np.ndarray, labels: np.ndarra
 
 
 class AggregatorDict(dict):
-    def __init__(self, keys: List[str]):
+    def __init__(self):
         super(AggregatorDict, self).__init__()
-        self.keys = keys
-        for key in keys:
-            super().__setitem__(key, [])
 
     def __setitem__(self, __k, __v) -> None:
         self[__k].append(__v)
 
     def add(self, __d) -> None:
         for k, v in __d.items():
-            if k in set(self.keys):
+            if k in set(self.keys()):
                 self.__setitem__(k, v)
+            else:
+                super().__setitem__(k, [v])
 
     def aggregate(self) -> dict:
         new_dict = {}
