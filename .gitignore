@@ -1,7 +1,14 @@
+# IDE-specific files
 .idea/
 .vscode/
 .project
 
-results/**/
+# cache
 __pycache__/
 .cache
+
+# files and folders specific to this project
+results/**/
+notebooks/*.ipynb
+scripts/*.bash
+scripts/*.ps1
