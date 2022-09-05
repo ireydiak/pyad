@@ -12,5 +12,6 @@ results/**/
 notebooks/*.ipynb
 scripts/*.bash
 scripts/*.ps1
-models/*.pt
-models/*.npy
+models/**/*.pt
+models/**/*.npy
+models/**/*.sav

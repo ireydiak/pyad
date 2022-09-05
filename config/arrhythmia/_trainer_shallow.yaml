@@ -1,0 +1,7 @@
+trainer:
+  class_path: pyad.models.trainer.ShallowModuleTrainer
+  init_args:
+    max_epochs: -1
+    n_runs: 20
+    enable_checkpoints: True
+    resume_from_checkpoint: models/arrhythmia/ocsvm.sav

@@ -1,0 +1,15 @@
+model:
+  class_path: pyad.lightning.transformers.LitGOAD
+  init_args:
+    weight_decay: 1e-4
+    lr: 1e-4
+    n_transforms: 64
+    feature_dim: 64
+    num_hidden_nodes: 32
+    batch_size: 1024
+    n_layers: 5
+    eps: 0
+    lamb: 0.1
+    margin: 1
+trainer:
+  max_epochs: 25
