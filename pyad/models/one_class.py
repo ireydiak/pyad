@@ -5,7 +5,6 @@ import torch.nn.functional as F
 from collections import OrderedDict
 from pyad.models.base import BaseModule, create_net_layers
 from pyad.utilities.cli import MODEL_REGISTRY
-from torch.optim.lr_scheduler import StepLR
 from torch.utils.data import DataLoader
 from torch import nn
 from typing import List
@@ -21,7 +20,6 @@ class DeepSVDD(BaseModule):
             activation="relu",
             eps: float = 0.1,
             radius=None,
-            center=None,
             **kwargs):
         super(DeepSVDD, self).__init__(**kwargs)
         # model parameters
@@ -30,7 +28,9 @@ class DeepSVDD(BaseModule):
         self.activation = activation
         self.eps = eps
         # computed parameters
-        self.center = center
+        self.center = nn.Parameter(
+            torch.empty(self.feature_dim, dtype=torch.float, device=self.device)
+        )
         self.radius = radius
         self._build_network()
 
@@ -59,7 +59,7 @@ class DeepSVDD(BaseModule):
         """Initialize hypersphere center c as the mean from an initial forward pass on the data.
            Code taken from https://github.com/lukasruff/Deep-SVDD-PyTorch/blob/master/src/optim/deepSVDD_trainer.py"""
         n_samples = 0
-        c = torch.zeros(self.feature_dim, device=self.device)
+        c = torch.empty(self.feature_dim, dtype=torch.float, device=self.device)
 
         self.net.eval()
         self.eval()
@@ -86,11 +86,12 @@ class DeepSVDD(BaseModule):
         c[(abs(c) < self.eps) & (c < 0)] = -self.eps
         c[(abs(c) < self.eps) & (c > 0)] = self.eps
 
-        return c
+        return nn.Parameter(c)
 
     def on_before_fit(self, dataloader: DataLoader):
         print("Initializing center ...")
-        self.center = self.init_center_c(dataloader).to(self.device)
+        center = self.init_center_c(dataloader).to(self.device)
+        self.center = center
 
     def score(self, X: torch.Tensor, y: torch.Tensor = None, labels: torch.Tensor = None):
         assert torch.allclose(self.center, torch.zeros_like(self.center)) is False, "center not initialized"

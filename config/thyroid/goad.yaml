@@ -13,4 +13,10 @@ model:
     lamb: 0.1
     margin: 1
 trainer:
-  max_epochs: 1
+  class_path: pyad.models.trainer.ModuleTrainer
+  init_args:
+    max_epochs: 1
+    n_runs: 20
+    val_check_interval: 1
+    enable_checkpoints: True
+    checkpoint_interval: 5

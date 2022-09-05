@@ -13,6 +13,7 @@ from pyad.models.base import BaseModule
 from pyad.utilities import instantiate_class
 from pyad.utilities import metrics
 from pyad.utilities.cli import TRAINER_REGISTRY
+from pyad.utilities.fsystem import mkdir_if_not_exists
 
 
 @TRAINER_REGISTRY
@@ -22,12 +23,15 @@ class ModuleTrainer:
             max_epochs: int,
             n_runs: int = 1,
             device: str = "cuda",
-            val_check_interval: int = None,
+            val_check_interval: int = 1,
             enable_checkpoints: bool = False,
             enable_early_stopping: bool = False,
             save_dir: str = "results",
             results_fname: str = "results.csv",
             multi_eval_results_fname: str = "multi_evaluation_results.csv",
+            resume_from_checkpoint: str = None,
+            checkpoint_interval: int = None,
+            checkpoint_fname: str = None
     ):
         """
         Basic Trainer class to train and test deep neural networks based on the abstract pyad.base.BaseModule class
@@ -54,6 +58,15 @@ class ModuleTrainer:
 
         save_dir: str
             base directory where model weights and results are stored
+
+        resume_from_checkpoint: str
+            path to checkpoint file
+
+        checkpoint_interval: int
+            number of epochs before saving checkpoints
+
+        checkpoint_fname : str
+            checkpoint filename
         """
         self.max_epochs = max_epochs
         self.n_runs = n_runs
@@ -62,6 +75,9 @@ class ModuleTrainer:
         self.results_fname = results_fname
         self.multi_eval_results_fname = multi_eval_results_fname
         self.val_check_interval = val_check_interval
+        self.resume_from_checkpoint = resume_from_checkpoint
+        self.checkpoint_interval = checkpoint_interval
+        self.checkpoint_fname = checkpoint_fname
         # TODO: enable checkpoints
         self.enable_checkpoints = enable_checkpoints
         # TODO: enable early stopping
@@ -69,6 +85,11 @@ class ModuleTrainer:
         # results placeholders
         self.multi_eval_results, self.results = None, None
         self.optimizer, self.scheduler = None, None
+        # load checkpoint
+        if resume_from_checkpoint:
+            ckpt = torch.load(resume_from_checkpoint)
+            self.n_runs -= ckpt["run"]
+            self.n_runs = max(self.n_runs, 1)
 
     def get_params(self) -> dict:
         return {
@@ -154,6 +175,33 @@ class ModuleTrainer:
         # save dataframes
         return multi_eval_df, results_df
 
+    def save_checkpoint(self, model: BaseModule, run_number: int, epoch: int, path_to_ckpt_file: str) -> None:
+        if not path_to_ckpt_file.endswith(".pt"):
+            path_to_ckpt_file += ".pt"
+        state_dict = {
+            "epoch": epoch,
+            "run": run_number,
+            "model_state_dict": model.state_dict(),
+            "optimizer_state_dict": self.optimizer.state_dict()
+        }
+        torch.save(
+            state_dict, path_to_ckpt_file
+        )
+
+    def load_checkpoint(self, model: BaseModule, path_to_ckpt_file: str) -> Tuple[BaseModule, int, int]:
+        ckpt = torch.load(path_to_ckpt_file)
+        model.load_state_dict(
+            ckpt["model_state_dict"]
+        )
+        optimizer, _ = model.configure_optimizers()
+        optimizer.load_state_dict(
+            ckpt["optimizer_state_dict"]
+        )
+        self.optimizer = optimizer
+        model.train()
+
+        return model, ckpt["run"], ckpt["epoch"]
+
     def _forward(self, model: BaseModule, X: torch.Tensor, y: torch.Tensor) -> float:
         # clear gradients
         self.optimizer.zero_grad()
@@ -167,30 +215,45 @@ class ModuleTrainer:
             self.scheduler.step()
         return loss.item()
 
-    def _run_once(self, model: BaseModule, train_ldr: DataLoader, validation_ldr: DataLoader = None):
-        # TODO: add validation logic after n epochs
+    def _run_once(
+            self,
+            model: BaseModule,
+            run_number: int,
+            train_ldr: DataLoader,
+            validation_ldr: DataLoader = None,
+            last_epoch: int = 0
+    ):
         model.on_before_fit(train_ldr)
-        for epoch in range(self.max_epochs):
+        for epoch in range(last_epoch, self.max_epochs):
             model.current_epoch = epoch
             model.on_train_epoch_start()
             with tqdm(train_ldr, leave=True) as t_epoch:
                 t_epoch.set_description(f"Epoch {epoch + 1}")
+                model.on_train_epoch_start()
                 for X, y, full_labels in t_epoch:
                     y = y.to(model.device).float()
                     X = X.to(model.device).float()
                     loss = self._forward(model, X, y)
                     # validation step and log
-                    if validation_ldr is not None and self.val_check_interval is not None and (epoch + 1) % self.val_check_interval == 0:
-                        # compute score un validation set
-                        test_scores, y_test_true, _ = model.predict(validation_ldr)
-                        res, _ = metrics.score_recall_precision_w_threshold(
-                            test_scores, y_test_true
-                        )
-                        t_epoch.set_postfix(loss='{:.6f}'.format(loss), f_score=res["F1-Score"])
-                    else:
-                        t_epoch.set_postfix(loss='{:.6f}'.format(loss))
-                    t_epoch.update()
-            model.on_train_epoch_end()
+                model.on_train_epoch_end()
+                if validation_ldr is not None and (epoch + 1) % self.val_check_interval == 0:
+                    # compute score un validation set
+                    test_scores, y_test_true, _ = model.predict(validation_ldr)
+                    res, _ = metrics.score_recall_precision_w_threshold(
+                        test_scores, y_test_true
+                    )
+                    t_epoch.set_postfix(loss='{:.6f}'.format(loss), f_score=res["F1-Score"])
+                else:
+                    t_epoch.set_postfix(loss='{:.6f}'.format(loss))
+                t_epoch.update()
+                # save checkpoint
+                if self.enable_checkpoints and (epoch + 1) % self.checkpoint_interval == 0:
+                    ckpt_path = os.path.join(self.save_dir, "checkpoints", "run_%d" % run_number)
+                    ckpt_fname = self.checkpoint_fname or model.print_name() + "_epoch={}.pt".format(epoch)
+                    mkdir_if_not_exists(ckpt_path)
+                    self.save_checkpoint(
+                        model, run_number, epoch, os.path.join(ckpt_path, ckpt_fname)
+                    )
 
     def run_experiments(self, model_cfg: dict, data: TabularDataset) -> None:
         # setup
@@ -203,37 +266,60 @@ class ModuleTrainer:
         )
         model_name = model.print_name()
         dataset_name = data.name
+        ckpt_model, ckpt_optimizer, last_run, last_epoch = None, None, 0, 0
+        # load checkpoint
+        if self.resume_from_checkpoint is not None:
+            ckpt_model, last_run, last_epoch = self.load_checkpoint(model, self.resume_from_checkpoint)
+        # print current configuration
         print("Running %d experiments with model %s on dataset %s using device %s" % (
             self.n_runs, model_name, dataset_name, self.device
         ))
         now = dt.now().strftime("%d-%m-%Y_%H-%M-%S")
         # start training
-        for run in range(self.n_runs):
+        for run in range(last_run, self.n_runs):
             # create fresh model
-            model = instantiate_class(
-                init=model_cfg, n_instances=n_instances, in_features=in_features, device=self.device
-            )
+            if ckpt_model is not None:
+                model = ckpt_model
+            else:
+                model = instantiate_class(
+                    init=model_cfg, n_instances=n_instances, in_features=in_features, device=self.device
+                )
             # create optimizer and scheduler
-            self.optimizer, self.scheduler = model.configure_optimizers()
+            optimizer, self.scheduler = model.configure_optimizers()
+            self.optimizer = ckpt_optimizer or optimizer
             # select different normal samples for both training and test sets
             train_ldr, test_ldr = data.loaders()
             # fit model on training data
-            self._run_once(model, train_ldr=train_ldr, validation_ldr=test_ldr)
+            self._run_once(model, run, train_ldr=train_ldr, validation_ldr=test_ldr, last_epoch=last_epoch)
             # evaluate model on test set
             f_score = self.test(model, train_ldr, test_ldr, normal_str_repr=normal_str_repr)
             print("\nRun {}: f_score={:.4f}".format(run + 1, f_score))
+            ckpt_model, ckpt_optimizer, last_epoch = None, None, 0
         # aggregate and save results
         multi_eval_df, results_df = self.aggregate_results(model.get_params(), data.get_params())
         agg_results_fname = os.path.join(self.save_dir, self.results_fname)
         multi_eval_save_dir = os.path.join(self.save_dir, now)
-        if not os.path.exists(multi_eval_save_dir):
-            os.mkdir(multi_eval_save_dir)
+        mkdir_if_not_exists(multi_eval_save_dir)
         results_df.to_csv(agg_results_fname)
         multi_eval_df.to_csv(
             os.path.join(multi_eval_save_dir, self.multi_eval_results_fname)
         )
+        # save model
+        if self.enable_checkpoints:
+            model_path = os.path.join("models", dataset_name)
+            mkdir_if_not_exists(model_path)
+            self.save_checkpoint(
+                model, run, self.max_epochs,
+                os.path.join(model_path, model_name + ".pt")
+            )
 
-    def test(self, model: BaseModule, train_ldr: DataLoader, test_ldr: DataLoader, normal_str_repr: str = "0"):
+    def test(
+            self,
+            model: BaseModule,
+            train_ldr: DataLoader,
+            test_ldr: DataLoader,
+            normal_str_repr: str = "0"
+    ):
         # Predict
         test_scores, y_test_true, test_labels = model.predict(test_ldr)
         train_scores, y_train_true, train_labels = model.predict(train_ldr)
@@ -272,6 +358,39 @@ class AdversarialModuleTrainer(ModuleTrainer):
             self.scheduler.step()
 
         return loss_d.item() + loss_g.item()
+
+    def save_checkpoint(self, model: BaseModule, run_number: int, epoch: int, path_to_ckpt_file: str) -> None:
+        g_opt, d_opt = self.optimizer
+        if not path_to_ckpt_file.endswith(".pt"):
+            path_to_ckpt_file += ".pt"
+        state_dict = {
+            "epoch": epoch,
+            "run": run_number,
+            "model_state_dict": model.state_dict(),
+            "d_optimizer_state_dict": d_opt.state_dict(),
+            "g_optimizer_state_dict": g_opt.state_dict()
+        }
+        torch.save(
+            state_dict, path_to_ckpt_file
+        )
+
+    def load_checkpoint(self, model: BaseModule, path_to_ckpt_file: str) -> Tuple[BaseModule, int, int]:
+        ckpt = torch.load(path_to_ckpt_file)
+        model.load_state_dict(
+            ckpt["model_state_dict"]
+        )
+        optimizers, _ = model.configure_optimizers()
+        g_opt, d_opt = optimizers
+        g_opt.load_state_dict(
+            ckpt["g_optimizer_state_dict"]
+        )
+        d_opt.load_state_dict(
+            ckpt["d_optimizer_state_dict"]
+        )
+        self.optimizer = (g_opt, d_opt)
+        model.train()
+
+        return model, ckpt["run"], ckpt["epoch"]
 
 
 def prepare_df(row_data: dict):

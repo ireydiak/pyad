@@ -37,8 +37,8 @@ class DSEBM(BaseModule):
         self.score_metric = score_metric
         # create optimizable param
         self.b_prime = b_prime or torch.nn.Parameter(
-            torch.Tensor(self.batch_size, self.in_features)
-        ).to(self.device)
+            torch.empty(self.batch_size, self.in_features, dtype=torch.float, device=self.device)
+        )
         torch.nn.init.xavier_normal_(self.b_prime)
         # build neural network
         self._build_network()
@@ -178,10 +178,18 @@ class DAGMM(BaseModule):
         self.reg_covar = reg_covar
         self.dropout_rate = dropout_rate
         # computed parameters
-        self.phi = None
-        self.mu = None
-        self.cov_mat = None
-        self.covs = None
+        self.phi = torch.nn.Parameter(
+            torch.empty((self.n_mixtures,), dtype=torch.float, device=self.device)
+        )
+        self.mu = torch.nn.Parameter(
+            torch.empty((self.n_mixtures, self.latent_dim + 2), dtype=torch.float, device=self.device)
+        )
+        self.cov_mat = torch.nn.Parameter(
+            torch.empty(
+                (self.n_mixtures, self.latent_dim + 2, self.latent_dim + 2),
+                dtype=torch.float, device=self.device
+            )
+        )
         self.cosim = nn.CosineSimilarity().to(self.device)
         self.softmax = nn.Softmax(dim=1).to(self.device)
         # build network
@@ -260,9 +268,9 @@ class DAGMM(BaseModule):
         energy_result, pen_cov_mat = self.estimate_sample_energy(
             z, phi, mu, cov_mat
         )
-        self.phi = phi.data
-        self.mu = mu.data
-        self.cov_mat = cov_mat
+        self.phi = torch.nn.Parameter(phi)
+        self.mu = torch.nn.Parameter(mu)
+        self.cov_mat = torch.nn.Parameter(cov_mat)
         loss = self.compute_loss(x_prime, X=X, energy=energy_result, pen_cov_mat=pen_cov_mat)
         return loss
 
@@ -432,6 +440,18 @@ class SOMDAGMM(BaseModule):
         self.dagmm = dagmm
         self.som_args = None
         self.soms = None
+        self.dagmm.mu = torch.nn.Parameter(
+            torch.empty(
+                (self.dagmm.n_mixtures, self.dagmm.latent_dim + 4),
+                dtype=torch.float, device=self.device
+            )
+        )
+        self.dagmm.cov_mat = torch.nn.Parameter(
+            torch.empty(
+                (self.dagmm.n_mixtures, self.dagmm.latent_dim + 4, self.dagmm.latent_dim + 4),
+                dtype=torch.float, device=self.device
+            )
+        )
         self._build_network()
 
     def _build_network(self):
@@ -528,9 +548,9 @@ class SOMDAGMM(BaseModule):
         energy_result, pen_cov_mat = self.dagmm.estimate_sample_energy(
             Z, phi, mu, cov_mat
         )
-        self.dagmm.phi = phi.data
-        self.dagmm.mu = mu.data
-        self.dagmm.cov_mat = cov_mat
+        self.dagmm.phi = torch.nn.Parameter(phi)
+        self.dagmm.mu = torch.nn.Parameter(mu)
+        self.dagmm.cov_mat = torch.nn.Parameter(cov_mat)
         return self.compute_loss(X_hat, X=X, energy=energy_result, Sigma=pen_cov_mat)
 
     def compute_loss(self, outputs: torch.Tensor, **kwargs):

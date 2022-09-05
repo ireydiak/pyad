@@ -72,10 +72,15 @@ class GOAD(BaseModule):
         # Transformation matrix
         trans_matrix = torch.randn(
             (self.n_transforms, self.in_features, self.feature_dim),
+            dtype=torch.float, device=self.device
         )
-        self.trans_matrix = trans_matrix.to(self.device)
+        self.trans_matrix = nn.Parameter(trans_matrix)
         # Hypersphere centers
-        self.centers = torch.zeros((self.feature_dim, self.n_transforms)).to(self.device)
+        centers = torch.empty(
+            (self.num_hidden_nodes, self.n_transforms),
+            dtype=torch.float, device=self.device
+        )
+        self.centers = torch.nn.Parameter(centers, requires_grad=False)
         # used to compute hypersphere centers
         self.n_batch = 0
 
@@ -156,7 +161,7 @@ class GOAD(BaseModule):
         # Forward pass
         tc_zs, logits = self.forward(X_augmented)
         # Update enters estimates
-        self.centers += tc_zs.mean(0)
+        self.centers += tc_zs.mean(0).data
         # Update batch count for computing centers means
         self.n_batch += 1
         # Compute loss
@@ -173,11 +178,16 @@ class GOAD(BaseModule):
         return loss
 
     def on_train_epoch_start(self) -> None:
-        self.centers = torch.zeros((self.num_hidden_nodes, self.n_transforms)).to(self.device)
+        centers = torch.zeros(
+            (self.num_hidden_nodes, self.n_transforms),
+            dtype=torch.float, device=self.device
+        )
+        self.centers = torch.nn.Parameter(centers, requires_grad=False)
         self.n_batch = 0
 
     def on_train_epoch_end(self) -> None:
-        self.centers = (self.centers.mT / self.n_batch).unsqueeze(0).to(self.device)
+        centers = (self.centers.mT / self.n_batch).unsqueeze(0).float().to(self.device)
+        self.centers = torch.nn.Parameter(centers, requires_grad=False)
 
     def get_hparams(self):
         return dict(
