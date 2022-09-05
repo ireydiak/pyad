@@ -78,7 +78,7 @@ class ModuleTrainer:
         self.resume_from_checkpoint = resume_from_checkpoint
         self.checkpoint_interval = checkpoint_interval
         self.checkpoint_fname = checkpoint_fname
-        # TODO: enable checkpoints
+        self.now = dt.now().strftime("%d-%m-%Y_%H-%M-%S")
         self.enable_checkpoints = enable_checkpoints
         # TODO: enable early stopping
         self.enable_early_stopping = enable_early_stopping
@@ -188,7 +188,8 @@ class ModuleTrainer:
             state_dict, path_to_ckpt_file
         )
 
-    def load_checkpoint(self, model: BaseModule, path_to_ckpt_file: str) -> Tuple[BaseModule, int, int]:
+    def load_checkpoint(self, model: BaseModule, path_to_ckpt_file: str = None) -> Tuple[BaseModule, int, int]:
+        path_to_ckpt_file = path_to_ckpt_file or self.resume_from_checkpoint
         ckpt = torch.load(path_to_ckpt_file)
         model.load_state_dict(
             ckpt["model_state_dict"]
@@ -274,7 +275,6 @@ class ModuleTrainer:
         print("Running %d experiments with model %s on dataset %s using device %s" % (
             self.n_runs, model_name, dataset_name, self.device
         ))
-        now = dt.now().strftime("%d-%m-%Y_%H-%M-%S")
         # start training
         for run in range(last_run, self.n_runs):
             # create fresh model
@@ -295,15 +295,7 @@ class ModuleTrainer:
             f_score = self.test(model, train_ldr, test_ldr, normal_str_repr=normal_str_repr)
             print("\nRun {}: f_score={:.4f}".format(run + 1, f_score))
             ckpt_model, ckpt_optimizer, last_epoch = None, None, 0
-        # aggregate and save results
-        multi_eval_df, results_df = self.aggregate_results(model.get_params(), data.get_params())
-        agg_results_fname = os.path.join(self.save_dir, self.results_fname)
-        multi_eval_save_dir = os.path.join(self.save_dir, now)
-        mkdir_if_not_exists(multi_eval_save_dir)
-        results_df.to_csv(agg_results_fname)
-        multi_eval_df.to_csv(
-            os.path.join(multi_eval_save_dir, self.multi_eval_results_fname)
-        )
+        self.save_results(model, data)
         # save model
         if self.enable_checkpoints:
             model_path = os.path.join("models", dataset_name)
@@ -312,6 +304,17 @@ class ModuleTrainer:
                 model, run, self.max_epochs,
                 os.path.join(model_path, model_name + ".pt")
             )
+
+    def save_results(self, model: BaseModule, data: TabularDataset):
+        # aggregate and save results
+        multi_eval_df, results_df = self.aggregate_results(model.get_params(), data.get_params())
+        agg_results_fname = os.path.join(self.save_dir, self.results_fname)
+        multi_eval_save_dir = os.path.join(self.save_dir, self.now)
+        mkdir_if_not_exists(multi_eval_save_dir)
+        results_df.to_csv(agg_results_fname)
+        multi_eval_df.to_csv(
+            os.path.join(multi_eval_save_dir, self.multi_eval_results_fname)
+        )
 
     def test(
             self,

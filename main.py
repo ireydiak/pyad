@@ -1,4 +1,5 @@
 import os
+import warnings
 
 from pyad.datamanager.dataset import TabularDataset
 from pyad.models.trainer import ModuleTrainer
@@ -6,7 +7,7 @@ from pyad.utilities.cli import CLI
 from pyad.utilities import instantiate_class
 
 
-def train(
+def fit(
         model_cfg: dict,
         trainer: ModuleTrainer,
         data: TabularDataset
@@ -24,13 +25,46 @@ def train(
     trainer.run_experiments(model_cfg, data)
 
 
+def test(
+        model_cfg: dict,
+        trainer: ModuleTrainer,
+        data: TabularDataset
+):
+    if trainer.enable_checkpoints:
+        warnings.warn(
+            "`enable_checkpoints` is set to True but in test mode no checkpoints are saved. "
+            "To disable this warning set `enable_checkpoints` to False"
+        )
+    assert trainer.resume_from_checkpoint, "`test` requires parameter `Trainer.resume_from_checkpoint` to load a model"
+    # setup
+    model = instantiate_class(
+        init=model_cfg, n_instances=data.n_instances, in_features=data.in_features
+    )
+    save_dir = os.path.join("results", data.name, model.print_name())
+    # start testing
+    model, _, _ = trainer.load_checkpoint(model)
+    train_ldr, test_ldr = data.loaders()
+    trainer.save_dir = save_dir
+    trainer.setup_results()
+    trainer.enable_checkpoints = False
+    _ = trainer.test(model, train_ldr, test_ldr, normal_str_repr=data.normal_str_repr)
+    trainer.save_results(model, data)
+
+
 def main(cli):
     args = cli()
-    train(
-        model_cfg=args.model,
-        trainer=args.trainer,
-        data=args.data
-    )
+    if args.method == "fit":
+        fit(
+            model_cfg=args.model,
+            trainer=args.trainer,
+            data=args.data
+        )
+    elif args.method == "test":
+        test(
+            model_cfg=args.model,
+            trainer=args.trainer,
+            data=args.data
+        )
 
 
 if __name__ == '__main__':

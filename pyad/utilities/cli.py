@@ -64,6 +64,7 @@ class CLI:
     def __init__(self):
         self.parser = ArgumentParser()
         self.cfg = None
+        self.parser.add_argument("method", type=str, default="fit")
         self.parser.add_argument("--model", type=dict)
         self.parser.add_argument("--trainer", type=dict)
         self.parser.add_class_arguments(TabularDataset, "data.init_args")
