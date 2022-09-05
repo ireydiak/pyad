@@ -9,6 +9,7 @@ __pycache__/
 
 # files and folders specific to this project
 results/**/
+results/**/*.csv
 notebooks/*.ipynb
 scripts/*.bash
 scripts/*.ps1

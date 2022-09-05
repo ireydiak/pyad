@@ -1,8 +1,6 @@
 import numpy as np
 
 from abc import ABC, abstractmethod
-from typing import Tuple
-from torch.utils.data import DataLoader
 from pyad.utilities.cli import MODEL_REGISTRY
 from sklearn.neighbors import LocalOutlierFactor
 from sklearn.svm import OneClassSVM
@@ -20,16 +18,14 @@ class BaseShallowModel(ABC):
     def get_hparams(self):
         pass
 
-    def fit(self, dataset: DataLoader):
-        X = dataset.dataset.X
-        self.clf.fit(X)
+    def fit(self, train_data: np.ndarray) -> None:
+        self.clf.fit(train_data)
 
-    def predict(self, dataset: DataLoader) -> Tuple[np.ndarray, np.ndarray, np.ndarray]:
-        X, y, labels = dataset.dataset.X, dataset.dataset.y, dataset.dataset.labels
-        return self.score(X), y, labels
+    def predict(self, X: np.ndarray) -> np.ndarray:
+        return self.score(X)
 
     @abstractmethod
-    def score(self, X: np.ndarray, y: np.ndarray = None, labels: np.ndarray = None):
+    def score(self, X: np.ndarray) -> np.ndarray:
         pass
 
     def get_params(self) -> dict:
@@ -74,7 +70,7 @@ class OCSVM(BaseShallowModel):
     def print_name(self):
         return "ocsvm"
 
-    def score(self, X: np.ndarray, y: np.ndarray = None, labels: np.ndarray = None) -> np.ndarray:
+    def score(self, X: np.ndarray) -> np.ndarray:
         return -self.clf.score_samples(X)
 
     def get_hparams(self) -> dict:
@@ -113,5 +109,5 @@ class LOF(BaseShallowModel):
             n_neighbors=self.n_neighbors,
         )
 
-    def score(self, X: np.ndarray, y: np.ndarray = None, labels: np.ndarray = None) -> np.ndarray:
+    def score(self, X: np.ndarray) -> np.ndarray:
         return -self.clf.score_samples(X)

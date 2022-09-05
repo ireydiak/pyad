@@ -42,12 +42,13 @@ def test(
     )
     save_dir = os.path.join("results", data.name, model.print_name())
     # start testing
-    model, _, _ = trainer.load_checkpoint(model)
+    model, _, _ = trainer.load_model(model)
     train_ldr, test_ldr = data.loaders()
     trainer.save_dir = save_dir
     trainer.setup_results()
     trainer.enable_checkpoints = False
-    _ = trainer.test(model, train_ldr, test_ldr, normal_str_repr=data.normal_str_repr)
+    f1 = trainer.test(model, train_ldr, test_ldr, normal_str_repr=data.normal_str_repr)
+    print("f1-score={:.4f}".format(f1))
     trainer.save_results(model, data)
 
 

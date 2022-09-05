@@ -170,12 +170,7 @@ class TabularDataset(Dataset):
             raise RuntimeError(f"Could not open {path}. Dataset can only read .npz and .mat files.")
         return data
 
-    def loaders(
-            self,
-            test_size: float = 0.5,
-            num_workers: int = 0,
-            seed=None
-    ) -> (DataLoader, DataLoader):
+    def train_test_split(self, seed=None) -> Tuple[SimpleDataset, SimpleDataset]:
         # train,test split
         X_train, X_test, y_test, test_labels = train_test_split_normal_data(
             self.X, self.y, self.labels, seed=seed, normal_str_repr=self.normal_str_repr
@@ -189,6 +184,16 @@ class TabularDataset(Dataset):
         # convert numpy arrays to dataset objects
         train_set = SimpleDataset(X=X_train, y=np.zeros(len(X_train), dtype=np.int8), labels=np.zeros(len(X_train)))
         test_set = SimpleDataset(X=X_test, y=y_test, labels=test_labels)
+
+        return train_set, test_set
+
+    def loaders(
+            self,
+            test_size: float = 0.5,
+            num_workers: int = 0,
+            seed=None,
+    ) -> (DataLoader, DataLoader):
+        train_set, test_set = self.train_test_split(seed)
 
         # create dataloaders
         train_ldr = DataLoader(

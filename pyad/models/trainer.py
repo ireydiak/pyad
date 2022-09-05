@@ -4,12 +4,14 @@ import numpy as np
 import os
 import pandas as pd
 import torch
+import pickle
 
 from datetime import datetime as dt
 from torch.utils.data import DataLoader
 from tqdm import tqdm
-from pyad.datamanager.dataset import TabularDataset
+from pyad.datamanager.dataset import TabularDataset, SimpleDataset
 from pyad.models.base import BaseModule
+from pyad.models.shallow import BaseShallowModel
 from pyad.utilities import instantiate_class
 from pyad.utilities import metrics
 from pyad.utilities.cli import TRAINER_REGISTRY
@@ -85,11 +87,6 @@ class ModuleTrainer:
         # results placeholders
         self.multi_eval_results, self.results = None, None
         self.optimizer, self.scheduler = None, None
-        # load checkpoint
-        if resume_from_checkpoint:
-            ckpt = torch.load(resume_from_checkpoint)
-            self.n_runs -= ckpt["run"]
-            self.n_runs = max(self.n_runs, 1)
 
     def get_params(self) -> dict:
         return {
@@ -175,7 +172,7 @@ class ModuleTrainer:
         # save dataframes
         return multi_eval_df, results_df
 
-    def save_checkpoint(self, model: BaseModule, run_number: int, epoch: int, path_to_ckpt_file: str) -> None:
+    def save_model(self, model: BaseModule, run_number: int, epoch: int, path_to_ckpt_file: str) -> None:
         if not path_to_ckpt_file.endswith(".pt"):
             path_to_ckpt_file += ".pt"
         state_dict = {
@@ -188,7 +185,7 @@ class ModuleTrainer:
             state_dict, path_to_ckpt_file
         )
 
-    def load_checkpoint(self, model: BaseModule, path_to_ckpt_file: str = None) -> Tuple[BaseModule, int, int]:
+    def load_model(self, model: BaseModule, path_to_ckpt_file: str = None) -> Tuple[BaseModule, int, int]:
         path_to_ckpt_file = path_to_ckpt_file or self.resume_from_checkpoint
         ckpt = torch.load(path_to_ckpt_file)
         model.load_state_dict(
@@ -252,7 +249,7 @@ class ModuleTrainer:
                     ckpt_path = os.path.join(self.save_dir, "checkpoints", "run_%d" % run_number)
                     ckpt_fname = self.checkpoint_fname or model.print_name() + "_epoch={}.pt".format(epoch)
                     mkdir_if_not_exists(ckpt_path)
-                    self.save_checkpoint(
+                    self.save_model(
                         model, run_number, epoch, os.path.join(ckpt_path, ckpt_fname)
                     )
 
@@ -270,7 +267,9 @@ class ModuleTrainer:
         ckpt_model, ckpt_optimizer, last_run, last_epoch = None, None, 0, 0
         # load checkpoint
         if self.resume_from_checkpoint is not None:
-            ckpt_model, last_run, last_epoch = self.load_checkpoint(model, self.resume_from_checkpoint)
+            ckpt_model, last_run, last_epoch = self.load_model(model, self.resume_from_checkpoint)
+            self.n_runs -= last_run
+            self.n_runs = max(self.n_runs, 1)
         # print current configuration
         print("Running %d experiments with model %s on dataset %s using device %s" % (
             self.n_runs, model_name, dataset_name, self.device
@@ -300,7 +299,7 @@ class ModuleTrainer:
         if self.enable_checkpoints:
             model_path = os.path.join("models", dataset_name)
             mkdir_if_not_exists(model_path)
-            self.save_checkpoint(
+            self.save_model(
                 model, run, self.max_epochs,
                 os.path.join(model_path, model_name + ".pt")
             )
@@ -362,7 +361,7 @@ class AdversarialModuleTrainer(ModuleTrainer):
 
         return loss_d.item() + loss_g.item()
 
-    def save_checkpoint(self, model: BaseModule, run_number: int, epoch: int, path_to_ckpt_file: str) -> None:
+    def save_model(self, model: BaseModule, run_number: int, epoch: int, path_to_ckpt_file: str) -> None:
         g_opt, d_opt = self.optimizer
         if not path_to_ckpt_file.endswith(".pt"):
             path_to_ckpt_file += ".pt"
@@ -377,7 +376,8 @@ class AdversarialModuleTrainer(ModuleTrainer):
             state_dict, path_to_ckpt_file
         )
 
-    def load_checkpoint(self, model: BaseModule, path_to_ckpt_file: str) -> Tuple[BaseModule, int, int]:
+    def load_model(self, model: BaseModule, path_to_ckpt_file: str = None) -> Tuple[BaseModule, int, int]:
+        path_to_ckpt_file = path_to_ckpt_file or self.resume_from_checkpoint
         ckpt = torch.load(path_to_ckpt_file)
         model.load_state_dict(
             ckpt["model_state_dict"]
@@ -394,6 +394,98 @@ class AdversarialModuleTrainer(ModuleTrainer):
         model.train()
 
         return model, ckpt["run"], ckpt["epoch"]
+
+
+@TRAINER_REGISTRY
+class ShallowModuleTrainer(ModuleTrainer):
+
+    def get_params(self) -> dict:
+        return {
+            "n_runs": self.n_runs
+        }
+
+    def save_model(self, model: BaseShallowModel, epoch: int, run_number: int, path_to_ckpt_file: str) -> None:
+        pickle.dump(
+            model,
+            open(path_to_ckpt_file, "wb")
+        )
+
+    def load_model(self, model: BaseShallowModel, path_to_ckpt_file: str = None) -> Tuple[BaseShallowModel, int, int]:
+        path_to_ckpt_file = path_to_ckpt_file or self.resume_from_checkpoint
+        model = pickle.load(
+            open(path_to_ckpt_file, "rb")
+        )
+        return model, -1, -1
+
+    def run_experiments(self, model_cfg: dict, data: TabularDataset) -> None:
+        # setup
+        self.setup_results()
+        normal_str_repr = data.normal_str_repr
+        model = instantiate_class(
+            init=model_cfg
+        )
+        model_name = model.print_name()
+        dataset_name = data.name
+
+        # print current configuration
+        print("Running %d experiments with model %s on dataset %s" % (
+            self.n_runs, model_name, dataset_name
+        ))
+        if self.resume_from_checkpoint is not None:
+            _, last_run, _ = self.load_model(model, self.resume_from_checkpoint)
+            self.n_runs -= last_run
+            self.n_runs = max(self.n_runs, 1)
+        # start training
+        for run in range(self.n_runs):
+            model = instantiate_class(
+                init=model_cfg
+            )
+            # select different normal samples for both training and test sets
+            train_ldr, test_ldr = data.loaders()
+            # fit shallow model
+            model.fit(train_ldr.dataset.X)
+            # test
+            f_score = self.test(model, train_ldr, test_ldr, normal_str_repr=normal_str_repr)
+            if self.enable_checkpoints:
+                ckpt_path = os.path.join("results", dataset_name, "run_%d" % run)
+                mkdir_if_not_exists(ckpt_path)
+                self.save_model(
+                    model, -1, run, os.path.join(ckpt_path, model_name + ".sav")
+                )
+            print("\nRun {}: f_score={:.4f}".format(run + 1, f_score))
+        self.save_results(model, data)
+        # save model
+        if self.enable_checkpoints:
+            model_path = os.path.join("models", dataset_name)
+            mkdir_if_not_exists(model_path)
+            self.save_model(
+                model, -1, self.n_runs,
+                os.path.join(model_path, model_name + ".sav")
+            )
+
+    def test(
+            self,
+            model: BaseShallowModel,
+            train_ldr: DataLoader,
+            test_ldr: DataLoader,
+            normal_str_repr: str = "0"
+    ):
+        train_set = train_ldr.dataset
+        test_set = test_ldr.dataset
+        # Predict
+        test_scores = model.predict(test_set.X)
+        y_test_true, test_labels = test_set.y, test_set.labels
+        train_scores = model.predict(train_set.X)
+        y_train_true, train_labels = train_set.y, train_set.labels
+        # merge scores
+        train_test_scores = np.concatenate((train_scores, test_scores))
+        y_true_train_test = np.concatenate((y_train_true, y_test_true))
+        f_score = self.update_results(
+            train_test_scores, y_true_train_test, train_labels,
+            test_scores, y_test_true, test_labels,
+            normal_str_repr=normal_str_repr
+        )
+        return f_score
 
 
 def prepare_df(row_data: dict):
