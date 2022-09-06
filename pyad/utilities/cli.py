@@ -2,15 +2,38 @@ import inspect
 
 from typing import Type, Optional, Generator, List, Tuple, Any, Dict
 from types import ModuleType
+
+import yaml
 from jsonargparse import ActionConfigFile, ArgumentParser
 from pyad.datamanager.dataset import TabularDataset
 from pyad.utilities import instantiate_class
+
+
+def merge_dict(a: dict, b: dict) -> dict:
+    new_dict = a.copy()
+    for k, v in b.items():
+        new_dict[k] = v
+    return new_dict
+
+
+def merge_configs(configs: List[str], key: str):
+    final_cfg = {}
+    for f in configs:
+        with open(f, "r") as stream:
+            f_cfg = yaml.safe_load(stream)
+            if f_cfg.get(key, None):
+                for k, v in f_cfg.get(key).items():
+                    if type(v) == dict and final_cfg.get(k, None):
+                        v = merge_dict(final_cfg[k], v)
+                    final_cfg[k] = v
+    return final_cfg
 
 
 class _Registry(dict):
     """
         *** CLASS COPIED FROM the Lightning library (https://www.pytorchlightning.ai/) ***
     """
+
     def __call__(self, cls: Type, key: Optional[str] = None, override: bool = False) -> Type:
         """Registers a class mapped to a name.
 
@@ -73,13 +96,14 @@ class CLI:
     def __call__(self, *args, **kwargs):
         self.cfg = self.parser.parse_args()
         self.cfg = self.parser.instantiate_classes(self.cfg)
+        trainer_cfg = merge_configs(list(map(lambda f: f.abs_path, self.cfg.config)), "trainer")
         model = MODEL_REGISTRY.get(self.cfg.model["class_path"])
-        trainer = TRAINER_REGISTRY.get(self.cfg.trainer["class_path"])
+        trainer = TRAINER_REGISTRY.get(trainer_cfg["class_path"])
         if model is None:
             raise NotImplementedError("model %s unimplemented" % self.cfg.model["class_path"])
         if trainer is None:
             raise NotImplementedError("trainer %s unimplemented" % self.cfg.trainer["class_path"])
         data = self.cfg.data.init_args
         self.cfg.data = data
-        self.cfg.trainer = instantiate_class(init=self.cfg.trainer)
+        self.cfg.trainer = instantiate_class(init=trainer_cfg)
         return self.cfg

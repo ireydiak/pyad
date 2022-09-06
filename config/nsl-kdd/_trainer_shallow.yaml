@@ -1,9 +1,0 @@
-trainer:
-  class_path: pyad.models.trainer.ShallowModuleTrainer
-  init_args:
-    n_runs: 20
-    max_epochs: -1
-    enable_checkpoints: True
-    checkpoint_interval: 5
-    logger:
-      class_path: pyad.loggers.NeptuneLogger

@@ -12,12 +12,5 @@ model:
     lamb: 0.1
     margin: 1
 trainer:
-  class_path: pyad.models.trainer.ModuleTrainer
   init_args:
     max_epochs: 25
-    n_runs: 5
-    val_check_interval: 10
-    enable_checkpoints: True
-    checkpoint_interval: 5
-    logger:
-      class_path: pyad.loggers.NeptuneLogger

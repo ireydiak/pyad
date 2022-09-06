@@ -6,3 +6,5 @@ model:
     gamma: scale
     shrinking: False
     verbose: True
+trainer:
+  class_path: pyad.models.trainer.ShallowModuleTrainer

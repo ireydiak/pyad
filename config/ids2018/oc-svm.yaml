@@ -6,3 +6,11 @@ model:
     gamma: scale
     shrinking: False
     verbose: True
+trainer:
+  class_path: pyad.models.trainer.ShallowModuleTrainer
+  init_args:
+    max_epochs: -1
+    n_runs: 5
+    enable_checkpoints: True
+    logger:
+      class_path: pyad.loggers.NeptuneLogger

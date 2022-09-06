@@ -9,3 +9,5 @@ model:
 data:
   init_args:
     scaler: standard
+trainer:
+  class_path: pyad.models.trainer.ShallowModuleTrainer
