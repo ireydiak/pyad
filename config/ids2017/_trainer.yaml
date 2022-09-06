@@ -2,7 +2,7 @@ trainer:
   class_path: pyad.models.trainer.ModuleTrainer
   init_args:
     max_epochs: 200
-    n_runs: 20
+    n_runs: 5
     val_check_interval: 10
     enable_checkpoints: True
     checkpoint_interval: 5
