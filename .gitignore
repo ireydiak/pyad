@@ -6,6 +6,7 @@
 # cache
 __pycache__/
 .cache
+.neptune/
 
 # files and folders specific to this project
 results/**/

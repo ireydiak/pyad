@@ -5,3 +5,5 @@ trainer:
     max_epochs: -1
     enable_checkpoints: True
     checkpoint_interval: 5
+    logger:
+      class_path: pyad.loggers.NeptuneLogger

@@ -9,7 +9,8 @@ import pickle
 from datetime import datetime as dt
 from torch.utils.data import DataLoader
 from tqdm import tqdm
-from pyad.datamanager.dataset import TabularDataset, SimpleDataset
+from pyad.datamanager.dataset import TabularDataset
+from pyad.loggers import BaseLogger
 from pyad.models.base import BaseModule
 from pyad.models.shallow import BaseShallowModel
 from pyad.utilities import instantiate_class
@@ -33,7 +34,8 @@ class ModuleTrainer:
             multi_eval_results_fname: str = "multi_evaluation_results.csv",
             resume_from_checkpoint: str = None,
             checkpoint_interval: int = None,
-            checkpoint_fname: str = None
+            checkpoint_fname: str = None,
+            logger: BaseLogger = None
     ):
         """
         Basic Trainer class to train and test deep neural networks based on the abstract pyad.base.BaseModule class
@@ -87,6 +89,8 @@ class ModuleTrainer:
         # results placeholders
         self.multi_eval_results, self.results = None, None
         self.optimizer, self.scheduler = None, None
+        # logger
+        self.logger = logger or BaseLogger()
 
     def get_params(self) -> dict:
         return {
@@ -143,7 +147,6 @@ class ModuleTrainer:
         # compute per-class accuracy if more than two labels in test_labels
         if len(np.unique(test_labels)) > 2:
             pcacc = metrics.per_class_accuracy(y_test_true, y_pred, test_labels, normal_label=normal_str_repr)
-            # results = dict(**results, **pcacc)
             self.multi_eval_results["test_only_optimal"].add(pcacc)
             self.multi_eval_results["combined_optimal"].add(pcacc)
             self.multi_eval_results["test_only_leaking"].add(pcacc)
@@ -227,7 +230,6 @@ class ModuleTrainer:
             model.on_train_epoch_start()
             with tqdm(train_ldr, leave=True) as t_epoch:
                 t_epoch.set_description(f"Epoch {epoch + 1}")
-                model.on_train_epoch_start()
                 for X, y, full_labels in t_epoch:
                     y = y.to(model.device).float()
                     X = X.to(model.device).float()
@@ -274,8 +276,14 @@ class ModuleTrainer:
         print("Running %d experiments with model %s on dataset %s using device %s" % (
             self.n_runs, model_name, dataset_name, self.device
         ))
+        # log parameters
+        self.logger.log("trainer_parameters", self.get_params())
+        self.logger.log("parameters", model.get_params())
+        self.logger.log_metric("model/", model_name)
         # start training
         for run in range(last_run, self.n_runs):
+            # set tags for logger
+            self.logger.set_tags(model_name, dataset_name)
             # create fresh model
             if ckpt_model is not None:
                 model = ckpt_model
@@ -294,6 +302,11 @@ class ModuleTrainer:
             f_score = self.test(model, train_ldr, test_ldr, normal_str_repr=normal_str_repr)
             print("\nRun {}: f_score={:.4f}".format(run + 1, f_score))
             ckpt_model, ckpt_optimizer, last_epoch = None, None, 0
+            # log results
+            for metric, value in self.multi_eval_results["test_only_optimal"].items():
+                self.logger.log_metric("eval/" + metric, value[run])
+        self.logger.cleanup()
+
         self.save_results(model, data)
         # save model
         if self.enable_checkpoints:
@@ -435,8 +448,15 @@ class ShallowModuleTrainer(ModuleTrainer):
             _, last_run, _ = self.load_model(model, self.resume_from_checkpoint)
             self.n_runs -= last_run
             self.n_runs = max(self.n_runs, 1)
+        # log parameters
+        self.logger.log_metric("model/", model_name)
+        self.logger.log("trainer_parameters", self.get_params())
+        self.logger.log("parameters", model.get_params())
         # start training
         for run in range(self.n_runs):
+            # set tags for logger
+            self.logger.set_tags(model_name, dataset_name)
+            # create fresh model
             model = instantiate_class(
                 init=model_cfg
             )
@@ -452,7 +472,11 @@ class ShallowModuleTrainer(ModuleTrainer):
                 self.save_model(
                     model, -1, run, os.path.join(ckpt_path, model_name + ".sav")
                 )
+            # log results
+            for metric, value in self.multi_eval_results["test_only_optimal"].items():
+                self.logger.log_metric("eval/" + metric, value[run])
             print("\nRun {}: f_score={:.4f}".format(run + 1, f_score))
+        self.logger.cleanup()
         self.save_results(model, data)
         # save model
         if self.enable_checkpoints:

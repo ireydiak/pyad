@@ -15,7 +15,15 @@ model:
       - 64
       - 32
 trainer:
-  max_epochs: 1
+  class_path: pyad.models.trainer.ModuleTrainer
+  init_args:
+    n_runs: 20
+    val_check_interval: 5
+    max_epochs: 1
+    enable_checkpoints: True
+    checkpoint_interval: 5
+    logger:
+      class_path: pyad.loggers.NeptuneLogger
 data:
   init_args:
     batch_size: 1000

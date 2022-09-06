@@ -20,3 +20,5 @@ trainer:
     val_check_interval: 1
     enable_checkpoints: True
     checkpoint_interval: 5
+    logger:
+      class_path: pyad.loggers.NeptuneLogger

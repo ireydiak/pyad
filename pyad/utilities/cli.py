@@ -68,7 +68,6 @@ class CLI:
         self.parser.add_argument("--model", type=dict)
         self.parser.add_argument("--trainer", type=dict)
         self.parser.add_class_arguments(TabularDataset, "data.init_args")
-        # self.parser.add_class_arguments(ModuleTrainer, "trainer.init_args")
         self.parser.add_argument("--config", action=ActionConfigFile)
 
     def __call__(self, *args, **kwargs):
