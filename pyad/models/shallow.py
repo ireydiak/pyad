@@ -68,7 +68,7 @@ class OCSVM(BaseShallowModel):
         )
 
     def print_name(self):
-        return "ocsvm"
+        return "OC-SVM"
 
     def score(self, X: np.ndarray) -> np.ndarray:
         return -self.clf.score_samples(X)
@@ -102,7 +102,7 @@ class LOF(BaseShallowModel):
         )
 
     def print_name(self):
-        return "lof"
+        return "LOF"
 
     def get_hparams(self) -> dict:
         return dict(

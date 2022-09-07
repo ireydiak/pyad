@@ -45,7 +45,7 @@ class DeepSVDD(BaseModule):
         ).to(self.device)
 
     def print_name(self) -> str:
-        return "deepsvdd"
+        return "DSVDD"
 
     def get_hparams(self) -> dict:
         return dict(
@@ -184,7 +184,7 @@ class DROCC(BaseModule):
         ).to(self.device)
 
     def print_name(self) -> str:
-        return "drocc"
+        return "DROCC"
 
     def get_hparams(self) -> dict:
         return dict(

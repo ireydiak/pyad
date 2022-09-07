@@ -68,7 +68,7 @@ class ALAD(BaseModule):
         )
 
     def print_name(self) -> str:
-        return "alad"
+        return "ALAD"
 
     def compute_loss(self, outputs: torch.Tensor, **kwargs):
         pass

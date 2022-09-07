@@ -17,3 +17,4 @@ scripts/*.ps1
 models/**/*.pt
 models/**/*.npy
 models/**/*.sav
+scripts/tex-utilities/output/*.tex

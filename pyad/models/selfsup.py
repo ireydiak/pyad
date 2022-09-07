@@ -109,7 +109,7 @@ class GOAD(BaseModule):
         ).to(self.device)
 
     def print_name(self) -> str:
-        return "goad"
+        return "GOAD"
 
     def configure_optimizers(self):
         optimizer = torch.optim.Adam(
@@ -233,7 +233,7 @@ class NeuTraLAD(BaseModule):
         self.masks = self._create_masks()
 
     def print_name(self) -> str:
-        return "neutralad"
+        return "NeuTraLAD"
 
     def get_hparams(self) -> dict:
         return dict(

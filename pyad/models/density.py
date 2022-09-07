@@ -44,7 +44,7 @@ class DSEBM(BaseModule):
         self._build_network()
 
     def print_name(self) -> str:
-        return "dsebm-e" if self.score_metric == "energy" else "dsebm-r"
+        return "DSEBM-e" if self.score_metric == "energy" else "DSEBM-r"
 
     def _build_network(self):
         # TODO: Make model more flexible. Users should be able to set the number of layers
@@ -226,7 +226,7 @@ class DAGMM(BaseModule):
         ).to(self.device)
 
     def print_name(self) -> str:
-        return "dagmm"
+        return "DAGMM"
 
     def forward(self, X: torch.Tensor, return_gamma_hat=True):
         # computes the z vector of the original paper (p.4), that is
@@ -486,7 +486,7 @@ class SOMDAGMM(BaseModule):
         ).to(self.device)
 
     def print_name(self) -> str:
-        return "somdagmm"
+        return "SOM-DAGMM"
 
     def score(self, X: torch.Tensor, y: torch.Tensor = None, labels: torch.Tensor = None):
         _, _, _, Z, _ = self(X)

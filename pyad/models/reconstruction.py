@@ -56,7 +56,7 @@ class AutoEncoder(BaseModule):
         return optimizer, None
 
     def print_name(self) -> str:
-        return "autoencoder"
+        return "AutoEncoder"
 
     def get_hparams(self):
         params = {
@@ -144,7 +144,7 @@ class MemAE(BaseModule):
         ).to(self.device)
 
     def print_name(self) -> str:
-        return "memae"
+        return "MemAE"
 
     def compute_loss(self, outputs: torch.Tensor, **kwargs):
         X, W_hat = kwargs.get("X"), kwargs.get("W_hat")

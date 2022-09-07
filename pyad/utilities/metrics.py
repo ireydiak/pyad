@@ -111,5 +111,5 @@ class AggregatorDict(dict):
     def aggregate(self) -> dict:
         new_dict = {}
         for k, v in self.items():
-            new_dict[k] = "{:2.4f} ({:2.4f})".format(np.mean(v), np.std(v))
+            new_dict[k] = "{:2.2f} ({:2.1f})".format(np.mean(v), np.std(v))
         return new_dict
