@@ -1,0 +1,10 @@
+model:
+  class_path: pyad.models.shallow.OCSVM
+  init_args:
+    nu: 0.40
+    kernel: rbf
+    gamma: scale
+    shrinking: False
+    verbose: True
+trainer:
+  class_path: pyad.models.trainer.ShallowModuleTrainer
