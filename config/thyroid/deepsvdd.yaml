@@ -10,3 +10,10 @@ model:
     weight_decay: 1e-4
     lr: 1e-4
     n_epochs: 200
+trainer:
+  init_args:
+    enable_checkpoints: False
+    val_check_interval: -1
+data:
+  init_args:
+    batch_size: 1024
