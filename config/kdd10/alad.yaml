@@ -1,0 +1,10 @@
+model:
+  class_path: pyad.models.adversarial.ALAD
+  init_args:
+    weight_decay: 1e-6
+    lr: 1e-4
+    latent_dim: 64
+    out_dim: 128
+    negative_slope: 0.2
+trainer:
+  class_path: pyad.models.trainer.AdversarialModuleTrainer

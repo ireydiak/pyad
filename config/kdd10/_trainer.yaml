@@ -1,0 +1,10 @@
+trainer:
+  class_path: pyad.models.trainer.ModuleTrainer
+  init_args:
+    n_runs: 20
+    val_check_interval: 5
+    max_epochs: 100
+    enable_checkpoints: True
+    checkpoint_interval: 5
+    logger:
+      class_path: pyad.loggers.NeptuneLogger

@@ -1,0 +1,18 @@
+model:
+  class_path: pyad.models.selfsup.GOAD
+  init_args:
+    lr: 1e-4
+    n_transforms: 256
+    feature_dim: 128
+    num_hidden_nodes: 128
+    batch_size: 64
+    n_layers: 5
+    eps: 0
+    lamb: 0.1
+    margin: 1
+trainer:
+  init_args:
+    max_epochs: 25
+data:
+  init_args:
+    batch_size: 64
