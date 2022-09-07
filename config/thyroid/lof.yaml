@@ -4,3 +4,6 @@ model:
     n_neighbors: 20
 trainer:
   class_path: pyad.models.trainer.ShallowModuleTrainer
+data:
+  init_args:
+    scaler: MinMax
