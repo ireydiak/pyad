@@ -466,7 +466,7 @@ class ShallowModuleTrainer(ModuleTrainer):
             # test
             f_score = self.test(model, train_ldr, test_ldr, normal_str_repr=normal_str_repr)
             if self.enable_checkpoints:
-                ckpt_path = os.path.join("results", dataset_name, "run_%d" % run)
+                ckpt_path = os.path.join("results", dataset_name, model_name, "checkpoints", "run_%d" % run)
                 mkdir_if_not_exists(ckpt_path)
                 self.save_model(
                     model, -1, run, os.path.join(ckpt_path, model_name + ".sav")

@@ -11,3 +11,6 @@ model:
     weight_decay: 0.0
     lr: 1e-3
     n_epochs: 200
+data:
+  init_args:
+    scaler: MinMax

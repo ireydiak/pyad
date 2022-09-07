@@ -15,3 +15,4 @@ model:
 trainer:
   init_args:
     max_epochs: 1
+    scaler: None
