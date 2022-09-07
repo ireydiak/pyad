@@ -234,6 +234,8 @@ class ModuleTrainer:
                     y = y.to(model.device).float()
                     X = X.to(model.device).float()
                     loss = self._forward(model, X, y)
+                    t_epoch.set_postfix(loss='{:.6f}'.format(loss))
+                    t_epoch.update()
                     # validation step and log
                 model.on_train_epoch_end()
                 if validation_ldr is not None and (epoch + 1) % self.val_check_interval == 0:
@@ -242,10 +244,7 @@ class ModuleTrainer:
                     res, _ = metrics.score_recall_precision_w_threshold(
                         test_scores, y_test_true
                     )
-                    t_epoch.set_postfix(loss='{:.6f}'.format(loss), f_score=res["F1-Score"])
-                else:
-                    t_epoch.set_postfix(loss='{:.6f}'.format(loss))
-                t_epoch.update()
+                    print('f_score={:.6f}'.format(res["F1-Score"]))
                 # save checkpoint
                 if self.enable_checkpoints and (epoch + 1) % self.checkpoint_interval == 0:
                     ckpt_path = os.path.join(self.save_dir, "checkpoints", "run_%d" % run_number)
