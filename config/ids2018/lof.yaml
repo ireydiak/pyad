@@ -1,5 +1,5 @@
 model:
-  class_path: pyad.lightning.shallow.LOF
+  class_path: pyad.models.shallow.LOF
   init_args:
     n_neighbors: 15
 trainer:

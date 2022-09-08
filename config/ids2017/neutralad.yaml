@@ -1,5 +1,5 @@
 model:
-  class_path: pyad.lightning.transformers.LitNeuTraLAD
+  class_path: pyad.models.selfsup.NeuTraLAD
   init_args:
     weight_decay: 1e-4
     lr: 1e-4

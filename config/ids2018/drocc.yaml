@@ -1,5 +1,5 @@
 model:
-  class_path: pyad.lightning.one_class.LitDROCC
+  class_path: pyad.models.one_class.DROCC
   init_args:
     lamb: 1.
     radius: 3.
