@@ -1,0 +1,12 @@
+\begin{table*}[!h]
+    \tiny
+    \centering
+    \begin{tabular}{@{}\VAR{column_positions}{}}
+        \BLOCK{ for param_name in params } & \VAR{param_name} \BLOCK{ endfor } \\
+        \hline
+        \BLOCK{ for dataset_name, params in structure.items() }
+        \VAR{dataset_name} \BLOCK{ for param_name, param_value in params.items() } & \VAR{param_value} \BLOCK{ endfor } \\
+        \BLOCK{ endfor }
+    \end{tabular}
+\caption{\VAR{caption}}
+\end{table*}

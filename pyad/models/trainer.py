@@ -153,7 +153,11 @@ class ModuleTrainer:
             self.multi_eval_results["combined_theoretical"].add(pcacc)
         return f_score
 
-    def aggregate_results(self, model_params: dict, data_params: dict) -> Tuple[pd.DataFrame, pd.DataFrame]:
+    def aggregate_results(
+            self,
+            model_params: dict,
+            data_params: dict
+    ) -> Tuple[pd.DataFrame, pd.DataFrame]:
         # aggregate results
         for k, v in self.multi_eval_results.items():
             self.multi_eval_results[k] = v.aggregate()
@@ -175,7 +179,13 @@ class ModuleTrainer:
         # save dataframes
         return multi_eval_df, results_df
 
-    def save_model(self, model: BaseModule, run_number: int, epoch: int, path_to_ckpt_file: str) -> None:
+    def save_model(
+            self,
+            model: BaseModule,
+            run_number: int,
+            epoch: int,
+            path_to_ckpt_file: str
+    ) -> None:
         if not path_to_ckpt_file.endswith(".pt"):
             path_to_ckpt_file += ".pt"
         state_dict = {
@@ -188,7 +198,11 @@ class ModuleTrainer:
             state_dict, path_to_ckpt_file
         )
 
-    def load_model(self, model: BaseModule, path_to_ckpt_file: str = None) -> Tuple[BaseModule, int, int]:
+    def load_model(
+            self,
+            model: BaseModule,
+            path_to_ckpt_file: str = None
+    ) -> Tuple[BaseModule, int, int]:
         path_to_ckpt_file = path_to_ckpt_file or self.resume_from_checkpoint
         ckpt = torch.load(path_to_ckpt_file)
         model.load_state_dict(
@@ -203,7 +217,12 @@ class ModuleTrainer:
 
         return model, ckpt["run"], ckpt["epoch"]
 
-    def _forward(self, model: BaseModule, X: torch.Tensor, y: torch.Tensor) -> float:
+    def _forward(
+            self,
+            model: BaseModule,
+            X: torch.Tensor,
+            y: torch.Tensor
+    ) -> float:
         # clear gradients
         self.optimizer.zero_grad()
         # compute forward pass
