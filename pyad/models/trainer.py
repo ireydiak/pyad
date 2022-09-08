@@ -35,7 +35,8 @@ class ModuleTrainer:
             resume_from_checkpoint: str = None,
             checkpoint_interval: int = None,
             checkpoint_fname: str = None,
-            logger: BaseLogger = None
+            logger: BaseLogger = None,
+            normal_sampling_seed: int = None
     ):
         """
         Basic Trainer class to train and test deep neural networks based on the abstract pyad.base.BaseModule class
@@ -71,6 +72,9 @@ class ModuleTrainer:
 
         checkpoint_fname : str
             checkpoint filename
+
+        normal_sampling_seed: int
+            seed use to split normal data between train and test sets
         """
         self.max_epochs = max_epochs
         self.n_runs = n_runs
@@ -82,6 +86,7 @@ class ModuleTrainer:
         self.resume_from_checkpoint = resume_from_checkpoint
         self.checkpoint_interval = checkpoint_interval
         self.checkpoint_fname = checkpoint_fname
+        self.normal_sampling_seed = normal_sampling_seed
         self.now = dt.now().strftime("%d-%m-%Y_%H-%M-%S")
         self.enable_checkpoints = enable_checkpoints
         # TODO: enable early stopping
@@ -95,18 +100,18 @@ class ModuleTrainer:
     def get_params(self) -> dict:
         return {
             "max_epochs": self.max_epochs,
-            "n_runs": self.n_runs
+            "n_runs": self.n_runs,
+            "sampling_strategy": "static" if self.normal_sampling_seed else "random"
         }
 
     def setup_results(self) -> None:
-        self.multi_eval_results = {
+        self.results = {
             "combined_theoretical": metrics.AggregatorDict(),
             "combined_optimal": metrics.AggregatorDict(),
             "test_only_leaking": metrics.AggregatorDict(),
             "test_only_optimal": metrics.AggregatorDict(),
             "test_only_theoretical": metrics.AggregatorDict(),
         }
-        self.results = {}
 
     def update_results(
             self,
@@ -126,58 +131,61 @@ class ModuleTrainer:
         res, _ = metrics.score_recall_precision_w_threshold(
             test_train_scores, y_train_test_true, ratio=ratio_expected
         )
-        self.multi_eval_results["combined_theoretical"].add(res)
+        self.results["combined_theoretical"].add(res)
         res, _ = metrics.estimate_optimal_threshold(
             test_train_scores, y_train_test_true, ratio=ratio_expected
         )
-        self.multi_eval_results["combined_optimal"].add(res)
+        self.results["combined_optimal"].add(res)
         res, _ = metrics.score_recall_precision_w_threshold(
             test_scores, y_test_true, ratio=ratio_test
         )
-        self.multi_eval_results["test_only_leaking"].add(res)
+        self.results["test_only_leaking"].add(res)
         res, y_pred = metrics.estimate_optimal_threshold(
             test_scores, y_test_true, ratio=ratio_test
         )
         f_score = res["F1-Score"]
-        self.multi_eval_results["test_only_optimal"].add(res)
+        self.results["test_only_optimal"].add(res)
         res, _ = metrics.score_recall_precision_w_threshold(
             test_scores, y_test_true, ratio=ratio_expected
         )
-        self.multi_eval_results["test_only_theoretical"].add(res)
+        self.results["test_only_theoretical"].add(res)
         # compute per-class accuracy if more than two labels in test_labels
         if len(np.unique(test_labels)) > 2:
             pcacc = metrics.per_class_accuracy(y_test_true, y_pred, test_labels, normal_label=normal_str_repr)
-            self.multi_eval_results["test_only_optimal"].add(pcacc)
-            self.multi_eval_results["combined_optimal"].add(pcacc)
-            self.multi_eval_results["test_only_leaking"].add(pcacc)
-            self.multi_eval_results["combined_theoretical"].add(pcacc)
+            self.results["test_only_optimal"].add(pcacc)
+            self.results["combined_optimal"].add(pcacc)
+            self.results["test_only_leaking"].add(pcacc)
+            self.results["combined_theoretical"].add(pcacc)
         return f_score
 
-    def aggregate_results(
+    def aggregate_and_save_results(
             self,
             model_params: dict,
             data_params: dict
     ) -> Tuple[pd.DataFrame, pd.DataFrame]:
         # aggregate results
-        for k, v in self.multi_eval_results.items():
-            self.multi_eval_results[k] = v.aggregate()
-        self.results = self.multi_eval_results["test_only_optimal"]
+        for k, v in self.results.items():
+            self.results[k] = v.aggregate()
+            results_fname = os.path.join(self.save_dir, k + ".csv")
+            # prepare general results dataframe
+            row_data = dict(
+                **self.results[k],
+                **model_params,
+                **self.get_params(),
+                **data_params,
+            )
+            row, cols = prepare_df(row_data)
+            results_df = get_or_create_df(results_fname, row, cols, index_col="Timestamp")
+            results_df.to_csv(results_fname)
 
-        # Store Results
         # prepare dataframe with multiple evaluation protocols
-        multi_eval_df = pd.DataFrame.from_dict(self.multi_eval_results).T
-        agg_results_fname = os.path.join(self.save_dir, self.results_fname)
-        # prepare general results dataframe
-        row_data = dict(
-            **self.results,
-            **model_params,
-            **self.get_params(),
-            **data_params,
+        multi_eval_df = pd.DataFrame.from_dict(self.results).T
+        multi_eval_save_dir = os.path.join(self.save_dir, self.now)
+        mkdir_if_not_exists(multi_eval_save_dir)
+        multi_eval_df.to_csv(
+            os.path.join(multi_eval_save_dir, self.multi_eval_results_fname)
         )
-        row, cols = prepare_df(row_data)
-        results_df = get_or_create_df(agg_results_fname, row, cols, index_col="Timestamp")
-        # save dataframes
-        return multi_eval_df, results_df
+        return multi_eval_df
 
     def save_model(
             self,
@@ -247,7 +255,7 @@ class ModuleTrainer:
         for epoch in range(last_epoch, self.max_epochs):
             model.current_epoch = epoch
             model.on_train_epoch_start()
-            with tqdm(train_ldr, leave=True) as t_epoch:
+            with tqdm(train_ldr, leave=False) as t_epoch:
                 t_epoch.set_description(f"Epoch {epoch + 1}")
                 for X, y, full_labels in t_epoch:
                     y = y.to(model.device).float()
@@ -313,7 +321,7 @@ class ModuleTrainer:
             optimizer, self.scheduler = model.configure_optimizers()
             self.optimizer = ckpt_optimizer or optimizer
             # select different normal samples for both training and test sets
-            train_ldr, test_ldr = data.loaders()
+            train_ldr, test_ldr = data.loaders(seed=self.normal_sampling_seed)
             # fit model on training data
             self._run_once(model, run, train_ldr=train_ldr, validation_ldr=test_ldr, last_epoch=last_epoch)
             # evaluate model on test set
@@ -321,11 +329,10 @@ class ModuleTrainer:
             print("\nRun {}: f_score={:.4f}".format(run + 1, f_score))
             ckpt_model, ckpt_optimizer, last_epoch = None, None, 0
             # log results
-            for metric, value in self.multi_eval_results["test_only_optimal"].items():
+            for metric, value in self.results["test_only_optimal"].items():
                 self.logger.log_metric("eval/" + metric, value[run])
         self.logger.cleanup()
-
-        self.save_results(model, data)
+        self.aggregate_and_save_results(model.get_params(), data.get_params())
         # save model
         if self.enable_checkpoints:
             model_path = os.path.join("models", dataset_name)
@@ -337,7 +344,7 @@ class ModuleTrainer:
 
     def save_results(self, model: BaseModule, data: TabularDataset):
         # aggregate and save results
-        multi_eval_df, results_df = self.aggregate_results(model.get_params(), data.get_params())
+        multi_eval_df = self.aggregate_results(model.get_params(), data.get_params())
         agg_results_fname = os.path.join(self.save_dir, self.results_fname)
         multi_eval_save_dir = os.path.join(self.save_dir, self.now)
         mkdir_if_not_exists(multi_eval_save_dir)
@@ -496,6 +503,7 @@ class ShallowModuleTrainer(ModuleTrainer):
             print("\nRun {}: f_score={:.4f}".format(run + 1, f_score))
         self.logger.cleanup()
         self.save_results(model, data)
+        print(self.results)
         # save model
         if self.enable_checkpoints:
             model_path = os.path.join("models", dataset_name)

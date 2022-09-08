@@ -173,7 +173,8 @@ class TabularDataset(Dataset):
     def train_test_split(self, seed=None) -> Tuple[SimpleDataset, SimpleDataset]:
         # train,test split
         X_train, X_test, y_test, test_labels = train_test_split_normal_data(
-            self.X, self.y, self.labels, seed=seed, normal_str_repr=self.normal_str_repr
+            self.X, self.y, self.labels,
+            seed=seed, normal_str_repr=self.normal_str_repr
         )
         # normalize data
         if self.scaler:
@@ -192,6 +193,7 @@ class TabularDataset(Dataset):
             test_size: float = 0.5,
             num_workers: int = 0,
             seed=None,
+            shuffle=False
     ) -> (DataLoader, DataLoader):
         train_set, test_set = self.train_test_split(seed)
 
@@ -201,11 +203,13 @@ class TabularDataset(Dataset):
             batch_size=self.batch_size,
             num_workers=num_workers,
             pin_memory=True,
+            shuffle=shuffle
         )
         test_ldr = DataLoader(
             dataset=test_set,
             batch_size=self.batch_size,
             num_workers=num_workers,
-            pin_memory=True
+            pin_memory=True,
+            shuffle=shuffle
         )
         return train_ldr, test_ldr
