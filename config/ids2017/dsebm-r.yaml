@@ -1,5 +1,5 @@
 model:
-  class_path: pyad.lightning.density.LitDSEBM
+  class_path: pyad.models.density.DSEBM
   init_args:
     fc_1_out: 128
     fc_2_out: 512

@@ -1,5 +1,5 @@
 model:
-  class_path: pyad.lightning.reconstruction.LitMemAE
+  class_path: pyad.models.reconstruction.MemAE
   init_args:
     mem_dim: 150
     latent_dim: 10

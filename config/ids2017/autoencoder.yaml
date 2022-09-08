@@ -1,5 +1,5 @@
 model:
-  class_path: pyad.lightning.reconstruction.LitAutoEncoder
+  class_path: pyad.models.reconstruction.AutoEncoder
   init_args:
     hidden_dims:
       - 32
