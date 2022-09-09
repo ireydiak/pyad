@@ -12,6 +12,8 @@ __pycache__/
 results/**/
 results/**/*.csv
 notebooks/*.ipynb
+notebooks/**/*.png
+notebooks/**/*.pdf
 scripts/*.bash
 scripts/*.ps1
 models/**/*.pt

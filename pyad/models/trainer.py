@@ -53,10 +53,10 @@ class ModuleTrainer:
             device where tensors are stored (use "cuda" for using GPU and "cpu" for the CPU)
 
         val_check_interval: int
-            number of epochs between validation steps (***UNIMPLEMENTED***)
+            number of epochs between validation steps (set to None to skip validation)
 
         enable_checkpoints: bool
-            flag to enable/disable saving checkpoints (***UNIMPLEMENTED***)
+            flag to enable/disable saving checkpoints
 
         enable_early_stopping: bool
             flag to enable/disable saving early stopping (***UNIMPLEMENTED***)
@@ -82,7 +82,7 @@ class ModuleTrainer:
         self.save_dir = save_dir
         self.results_fname = results_fname
         self.multi_eval_results_fname = multi_eval_results_fname
-        self.val_check_interval = val_check_interval
+        self.val_check_interval = val_check_interval if type(val_check_interval) == int else None
         self.resume_from_checkpoint = resume_from_checkpoint
         self.checkpoint_interval = checkpoint_interval
         self.checkpoint_fname = checkpoint_fname
@@ -162,7 +162,7 @@ class ModuleTrainer:
             self,
             model_params: dict,
             data_params: dict
-    ) -> Tuple[pd.DataFrame, pd.DataFrame]:
+    ) -> pd.DataFrame:
         # aggregate results
         for k, v in self.results.items():
             self.results[k] = v.aggregate()
@@ -265,7 +265,7 @@ class ModuleTrainer:
                     t_epoch.update()
                     # validation step and log
                 model.on_train_epoch_end()
-                if validation_ldr is not None and (epoch + 1) % self.val_check_interval == 0:
+                if validation_ldr is not None and self.val_check_interval is not None and (epoch + 1) % self.val_check_interval == 0:
                     # compute score un validation set
                     test_scores, y_test_true, _ = model.predict(validation_ldr)
                     res, _ = metrics.score_recall_precision_w_threshold(
@@ -341,17 +341,6 @@ class ModuleTrainer:
                 model, run, self.max_epochs,
                 os.path.join(model_path, model_name + ".pt")
             )
-
-    def save_results(self, model: BaseModule, data: TabularDataset):
-        # aggregate and save results
-        multi_eval_df = self.aggregate_results(model.get_params(), data.get_params())
-        agg_results_fname = os.path.join(self.save_dir, self.results_fname)
-        multi_eval_save_dir = os.path.join(self.save_dir, self.now)
-        mkdir_if_not_exists(multi_eval_save_dir)
-        results_df.to_csv(agg_results_fname)
-        multi_eval_df.to_csv(
-            os.path.join(multi_eval_save_dir, self.multi_eval_results_fname)
-        )
 
     def test(
             self,
