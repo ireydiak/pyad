@@ -487,11 +487,11 @@ class ShallowModuleTrainer(ModuleTrainer):
                     model, -1, run, os.path.join(ckpt_path, model_name + ".sav")
                 )
             # log results
-            for metric, value in self.multi_eval_results["test_only_optimal"].items():
+            for metric, value in self.results["test_only_optimal"].items():
                 self.logger.log_metric("eval/" + metric, value[run])
             print("\nRun {}: f_score={:.4f}".format(run + 1, f_score))
         self.logger.cleanup()
-        self.save_results(model, data)
+        self.aggregate_and_save_results(model.get_params(), data.get_params())
         print(self.results)
         # save model
         if self.enable_checkpoints:

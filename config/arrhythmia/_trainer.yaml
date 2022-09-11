@@ -3,7 +3,7 @@ trainer:
   init_args:
     max_epochs: 200
     n_runs: 20
-    val_check_interval: 1
+    val_check_interval: None
     enable_checkpoints: True
     checkpoint_interval: 5
     logger:
