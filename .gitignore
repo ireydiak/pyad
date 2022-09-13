@@ -11,6 +11,8 @@ __pycache__/
 # files and folders specific to this project
 results/**/
 results/**/*.csv
+data/**/*.csv
+data/**/*.npy
 notebooks/*.ipynb
 notebooks/**/*.png
 notebooks/**/*.pdf

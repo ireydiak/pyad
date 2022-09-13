@@ -2,7 +2,8 @@ data:
   class_path: pyad.datamanager.TabularDataset
   init_args:
     batch_size: 1024
+    data_dir: data\IDS2017\ids2017.csv
     scaler: minmax
-    label_col: Category
-    normal_str_label: Benign
-    data_dir: C:\Users\verj2009\NRCAN\git\anomaly_detection_NRCAN\data\IDS2017\ids2017.csv
+    labels_col_name: Category
+    normal_str_repr: Benign
+    binary_labels_col_name: Label

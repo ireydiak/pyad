@@ -2,8 +2,9 @@ data:
   class_path: pyad.datamanager.datamodule.IDS2018DataModule
   init_args:
     batch_size: 1024
-    data_dir: C:\Users\verj2009\NRCAN\git\anomaly_detection_NRCAN\data\IDS2018\ids2018.csv
+    data_dir: data\IDS2018\ids2018.csv
     scaler: minmax
-    label_col: Category
-    normal_str_label: Benign
-    normal_size: 0.5
+    labels_col_name: Category
+    normal_str_repr: Benign
+    binary_labels_col_name: Label
+    normal_size: 0.4076

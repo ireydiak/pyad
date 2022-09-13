@@ -12,11 +12,11 @@ def parse_args() -> Namespace:
 
     # Paths
     parser.add_argument(
-        "-i", "--input-path", type=str,
+        "-i", "--input_path", type=str,
         help="Absolute path to original CSV file or path to root directory containing CSV files."
     )
     parser.add_argument(
-        "-o", "--output-path", type=str,
+        "-o", "--output_path", type=str,
         help="Path to the output directory. Folders will be added to this directory."
     )
     parser.add_argument(
@@ -56,7 +56,7 @@ def parse_args() -> Namespace:
               with the same initial values being assignated to the same numbers."
     )
     parser.add_argument(
-        "--drop", type=List[str],
+        "--drop_cols", type=List[str],
         default=None,
         help="The name of the column(s) to be deleted."
     )
@@ -64,15 +64,31 @@ def parse_args() -> Namespace:
     return parser.parse_args()
 
 
-def merge_step(input_path: str) -> Tuple[pd.DataFrame, dict]:
+def merge_step(
+        input_path: str,
+        output_path: str,
+        drop_cols: List[str]
+) -> Tuple[pd.DataFrame, dict]:
     df = pd.DataFrame()
     if os.path.isdir(input_path):
         for f in os.listdir(input_path):
-            chunk = pd.read_csv(os.path.join(input_path, f))
-            chunk.columns = chunk.columns.str.strip()
-            df = pd.concat((df, chunk))
+            if f.endswith(".csv"):
+                path_to_csv = os.path.join(input_path, f)
+                print(f"processing {path_to_csv} ...")
+                chunk = pd.read_csv(
+                    path_to_csv
+                )
+                chunk.columns = chunk.columns.str.strip()
+                chunk = chunk.drop(drop_cols, axis=1, errors="ignore")
+                df = pd.concat((df, chunk))
+            else:
+                print(f"skipping file {f}")
+        df.to_csv(
+            os.path.join(output_path, "merged.csv"), index=False
+        )
     else:
         df = pd.read_csv(input_path)
+        df = df.drop(drop_cols, axis=1, errors="ignore")
 
     stats = {"in_features": df.shape[1], "n_instances": df.shape[0]}
     return df, stats
@@ -109,7 +125,7 @@ def clean_invalid(
         df: pd.DataFrame,
         label_col: str,
         normal_label: str,
-        atol: float = 0.5
+        atol: float = 0.05
 ) -> Tuple[pd.DataFrame, dict, int, int]:
     # Verbose function
     stats = defaultdict()
@@ -129,12 +145,14 @@ def clean_invalid(
     for col in nan_cols:
         ratio = df.loc[:, col].isna().sum() / len(df)
         if ratio > atol:
+            print(f"Dropping {col} with NaN ratio={ratio}>{atol}")
             df = df.drop(col, axis=1)
             dropped_cols.append(col)
         else:
-            to_drop = df[~df[col].isna()]
-            dropped_rows += len(to_drop)
+            to_drop = df[df[col].isna()]
             assert to_drop[label_col != normal_label].sum() == 0, "found NaNs within abnormal data, aborting"
+            print(f"Dropping {len(to_drop)} rows")
+            dropped_rows += len(to_drop)
             df = df.drop(to_drop.index, axis=0)
     remaining_nans = df.isna().sum().sum()
     assert remaining_nans == 0, f"There are still {remaining_nans} NaN values"
@@ -189,7 +207,7 @@ def update_stats(
     return stats
 
 
-def save_stats(path: str, *stats: dict):
+def save_stats(path: str, *stats: dict) -> None:
     vals = {k: v for d in stats for k, v in d.items()}
     with open(path, 'w') as f:
         f.write(','.join(vals.keys()) + '\n')
@@ -204,12 +222,13 @@ def process(
         negative_atol: float,
         no_negative: List[str],
         output_path: str,
-        output_name: str
-):
+        output_name: str,
+        drop_cols: List[str] = None
+) -> None:
     stats = init_stats()
 
     # Load/merge files
-    df, step_stats = merge_step(input_path)
+    df, step_stats = merge_step(input_path, output_path, drop_cols)
     stats = update_stats(stats, step_stats, 0, 0)
 
     # Manage columns with unique values
@@ -253,7 +272,7 @@ def process(
     )
 
 
-def main():
+def main() -> None:
     args = parse_args()
     process(
         input_path=args.input_path,
@@ -263,7 +282,8 @@ def main():
         negative_atol=args.negative_atol,
         no_negative=args.no_negative,
         output_path=args.output_path,
-        output_name=args.output_name
+        output_name=args.output_name,
+        drop_cols=args.drop_cols
     )
 
 

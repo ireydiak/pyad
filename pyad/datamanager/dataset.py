@@ -51,22 +51,28 @@ def train_test_split_normal_data(
     shuffle_normal: bool
         Whether normal data should be shuffled or not (defaults to True)
     """
-    assert 0. < normal_size <= 1., "`normal_size` parameter must be inclusively in the range (0, 1], got {:2.4f}".format(
-        normal_size)
+    msg = "`normal_size` parameter must be inclusively in the range (0, 1], got {:2.4f}"
+    assert 0. < normal_size <= 1., msg.format(normal_size)
     if seed:
         np.random.seed(seed)
     # separate normal and abnormal data
     normal_data = X[y == 0]
     abnormal_data = X[y == 1]
-    # train, test split
-    n_normal = int((len(normal_data) * normal_size) // 2)
     # shuffle normal data
     if shuffle_normal:
         np.random.shuffle(normal_data)
-    # train (normal only)
-    X_train = normal_data[:n_normal]
-    # test (normal + attacks)
-    X_test_normal = normal_data[n_normal:]
+    n_normal = int(((len(normal_data) * normal_size) // 2))
+    # train, test split
+    if normal_size == 1.:
+        # train (normal only)
+        X_train = normal_data[:n_normal]
+        # test (normal + attacks)
+        X_test_normal = normal_data[n_normal:]
+    else:
+        # train (normal only)
+        X_train = normal_data[:n_normal]
+        # test (normal + attacks)
+        X_test_normal = normal_data[n_normal:n_normal*2]
     X_test = np.concatenate(
         (X_test_normal, abnormal_data)
     )
@@ -174,7 +180,7 @@ class TabularDataset(Dataset):
         # train,test split
         X_train, X_test, y_test, test_labels = train_test_split_normal_data(
             self.X, self.y, self.labels,
-            seed=seed, normal_str_repr=self.normal_str_repr
+            seed=seed, normal_str_repr=self.normal_str_repr, normal_size=self.normal_size
         )
         # normalize data
         if self.scaler:
