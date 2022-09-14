@@ -1,6 +1,6 @@
 from .encoding import BinaryEncoder
 from .filters import CleanNaN, ReplaceNaN, CleanNegative, CleanUnique
-from .misc import CopyColumn
+from .misc import CopyColumn, CopyLabels
 
 
 __all__ = [
@@ -9,5 +9,6 @@ __all__ = [
     "CleanNegative",
     "CleanUnique",
     "CopyColumn",
+    "CopyLabels",
     "ReplaceNaN",
 ]

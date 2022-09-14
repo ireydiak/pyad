@@ -32,17 +32,30 @@ class CopyColumn(TransformerMixin):
 
     def transform(self, df: pd.DataFrame, y: pd.DataFrame = None):
         self.after_shape = df.shape
-        df[self.to_col] = df[self.from_col]
+        df[self.to_col] = y
         return df
 
 
 class CopyLabels(TransformerMixin):
-    def __init__(self):
+    def __init__(self, to_col: str):
+        self.to_col = to_col
         self.y_copy = None
 
     def fit(self, df: pd.DataFrame, y: pd.DataFrame):
+        self.y_copy = y.copy()
         return self
 
-    def transform(self, df: pd.DataFrame, y: pd.DataFrame):
-        self.y_copy = y.copy()
+    def transform(self, df: pd.DataFrame):
+        df[self.to_col] = self.y_copy[df.index]
         return df
+
+
+class ItemSelector(TransformerMixin):
+    def __init__(self, key):
+        self.key = key
+
+    def fit(self, df: pd.DataFrame, y=None):
+        return self
+
+    def transform(self, df: pd.DataFrame):
+        return df[self.key]

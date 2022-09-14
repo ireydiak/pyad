@@ -1,14 +1,17 @@
 from argparse import Namespace
 from collections import defaultdict
-from typing import List, Tuple
+from typing import List, Tuple, Optional
 import os
 import pandas as pd
 import jsonargparse
 import numpy as np
+import sklearn.pipeline
+import yaml
 
 from scipy.io import loadmat
-from sklearn.pipeline import Pipeline
-from data.preprocessing import BinaryEncoder, CleanUnique, CleanNegative, CopyColumn, ReplaceNaN, CleanNaN
+from sklearn.pipeline import Pipeline, FeatureUnion
+from data.preprocessing import BinaryEncoder, CleanUnique, CleanNegative, CopyColumn, CopyLabels, ReplaceNaN, CleanNaN
+from data.preprocessing.misc import ItemSelector
 
 
 def parse_args() -> Namespace:
@@ -31,12 +34,12 @@ def parse_args() -> Namespace:
 
     parser.add_argument(
         "--nan_atol", type=float,
-        default=0.05,
+        default=0.01,
         help="Ratio of NaN values tolerated before dropping the columns"
     )
     parser.add_argument(
         "--negative_atol", type=float,
-        default=0.05,
+        default=0.01,
         help="Ratio of negative values tolerated before dropping the columns"
     )
     parser.add_argument(
@@ -273,12 +276,61 @@ class DataProcess:
 #         drop_cols=args.drop_cols
 #     )
 
-class IDSPipeline:
+class BasePipeline:
     def __init__(self, path: str, output_path: str, output_name: str, drop_cols: List[int] = None):
         self.path = path
         self.drop_cols = drop_cols or []
         self.output_path = output_path
-        self.output_name = output_name
+        self.output_name = output_name if output_name.endswith(".npz") else output_name + ".npz"
+
+    def load_data(self) -> Tuple[pd.DataFrame, pd.DataFrame]:
+        pass
+
+    def setup_pipeline(self) -> Pipeline:
+        pass
+
+    def preprocess_labels(self, y: pd.DataFrame, dropped_indexes: List[int]) -> Tuple[np.ndarray, Optional[np.ndarray]]:
+        y = y.drop(dropped_indexes, axis=0)
+        return y.astype(np.int8).to_numpy(), None
+
+    def process(self):
+        summary = {}
+        # Load data and labels
+        df, y = self.load_data()
+        summary["initial_n_instances"] = df.shape[0]
+        summary["initial_in_features"] = df.shape[1]
+        # Apply preprocessing on data
+        data_pipeline = self.setup_pipeline()
+        df = data_pipeline.fit_transform(df, y)
+        # Fetch dropped indexes and steps summaries for the report
+        dropped_indexes = set()
+        for step_name, step in data_pipeline.steps:
+            if hasattr(step, "summary"):
+                summary[step_name] = step.summary
+            if hasattr(step, "dropped_rows"):
+                dropped_indexes = dropped_indexes | set(step.dropped_rows)
+        summary["final_n_instances"] = df.shape[0]
+        summary["final_in_features"] = df.shape[1]
+        # Save changes summary in file
+        with open("debug.yaml", "w") as f:
+            f.write(
+                yaml.dump(summary, default_flow_style=False)
+            )
+        y, labels = self.preprocess_labels(y, dropped_indexes)
+
+        # Save data
+        np.savez(
+            os.path.join(self.output_path, self.output_name),
+            X=df.to_numpy(),
+            y=y,
+            labels=labels if labels is not None else []
+        )
+        # df.to_csv(
+        #     os.path.join(self.output_path, self.output_name)
+        # )
+
+
+class IDSPipeline(BasePipeline):
 
     def uniformize_labels(self, df: pd.DataFrame) -> pd.DataFrame:
         # Group DoS attacks
@@ -298,6 +350,27 @@ class IDSPipeline:
         mask = df["Label"].str.match("SSH-Patator")
         df.loc[mask, "Label"] = "SSH-Bruteforce"
         return df
+
+    def setup_pipeline(self) -> Pipeline:
+        data_pipeline = Pipeline(
+            steps=[
+                ("Clean Unique", CleanUnique()),
+                ("NaN Imputer", ReplaceNaN(missing_values=np.nan, fill_value=0)),
+                ("Negative Imputer", CleanNegative(atol=0.01, normal_label="Benign")),
+                ("Copy Labels", CopyLabels(to_col="Category")),
+            ]
+        )
+        return data_pipeline
+
+    def preprocess_labels(self, y: pd.DataFrame, dropped_indexes: List[int]) -> Tuple[np.ndarray, np.ndarray]:
+        # Remove dropped indexes
+        y = y.drop(list(dropped_indexes), axis=0)
+        # Copy labels
+        labels = y.copy()
+        # Encode binary labels
+        enc = BinaryEncoder(normal_label="Benign")
+        y = enc.fit_transform(y)
+        return y.astype(np.int8).to_numpy(), labels.to_numpy()
 
     def load_data(self):
         df = pd.DataFrame()
@@ -319,56 +392,27 @@ class IDSPipeline:
             df = pd.read_csv(self.path)
             df = df.drop(self.drop_cols, axis=1, errors="ignore")
         df = self.uniformize_labels(df)
-        return df
-
-    def process(self):
-        df = self.load_data()
-        pipeline = Pipeline(
-            steps=[
-                ("Clean Unique", CleanUnique()),
-                ("Simple NaN Imputer", ReplaceNaN(missing_values=np.nan, fill_value=0)),
-                ("Clean Negative", CleanNegative(atol=0.01, label_col="Label", normal_label="Benign")),
-                ("Copy Column", CopyColumn(from_col="Label", to_col="Category")),
-                ("Binary Encoding", BinaryEncoder(col="Label", normal_label="Benign"))
-            ],
-        )
-        df = pipeline.fit_transform(df)
-        df.to_csv(
-            os.path.join(self.output_path, self.output_name)
-        )
+        return df.drop("Label", axis=1), df.loc[:, "Label"]
 
 
-class MATPipeline:
-    def __init__(self, path: str, output_path: str, output_name: str, drop_cols: List[int] = None):
-        self.path = path
-        self.drop_cols = drop_cols or []
-        self.output_path = output_path
-        self.output_name = output_name
+class MATPipeline(BasePipeline):
 
     def load_data(self):
         mat = loadmat(self.path)
         X = mat['X']  # variable in mat file
         y = mat['y']
         # now make a data frame, setting the time stamps as the index
-        df = pd.DataFrame(
-            np.concatenate((X, y), axis=1),
-            columns=list(np.arange(1, X.shape[1] + 1)) + ["Label"]
-        )
-        return df
+        return pd.DataFrame(X), pd.DataFrame(y)
 
-    def process(self):
-        df = self.load_data()
+    def setup_pipeline(self) -> Pipeline:
         pipeline = Pipeline(
             steps=[
                 ("Clean Unique", CleanUnique()),
-                ("Clean NaN", CleanNaN(atol=0.01, label_col="Label", normal_label=0)),
-                ("Clean Negative", CleanNegative(atol=0.01, label_col="Label", normal_label=0)),
+                ("Clean NaN", CleanNaN(atol=0.01, normal_label=0)),
+                ("Clean Negative", CleanNegative(atol=0.01, normal_label=0)),
             ],
         )
-        df = pipeline.fit_transform(df)
-        df.to_csv(
-            os.path.join(self.output_path, self.output_name)
-        )
+        return pipeline
 
 
 def main():
