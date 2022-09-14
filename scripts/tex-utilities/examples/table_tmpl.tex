@@ -2,14 +2,14 @@
 \centering
 \begin{tabular}
 {@{}\VAR{column_positions}@{}}
-\toprule \BLOCK{ for dataset_name in datasets} & \multicolumn{\VAR{metrics|length}}{c}{\VAR{dataset_name}} \BLOCK{ endfor } \\
+\toprule \BLOCK{ for dataset_name in datasets} & \multicolumn{\VAR{metrics|length}}{c}{\VAR{dataset_name}} & \phantom{a} \BLOCK{ endfor } \\
 \cmidrule{2-4}
 \cmidrule{6-9}
 \BLOCK{ for _ in range(datasets|length) }
 \BLOCK{ for metric_name in metrics }& \VAR{metric_name} \BLOCK{ endfor }
 \BLOCK{ if not loop.last }&\BLOCK{ endif }
 \BLOCK{ endfor }\\
-
+\hline
 \BLOCK{ for model_name, results in structure.items() }
 \VAR{model_name}
 \BLOCK{ for res in results }

@@ -28,7 +28,9 @@ def merge_csv(
         filename: str,
         columns: List[str] = None
 ) -> pd.DataFrame:
-    paths = [os.path.join(directory, dr, filename) for dr in os.listdir(directory)]
+    paths = [
+        os.path.join(directory, dr, filename) for dr in os.listdir(directory) if os.path.isdir(os.path.join(directory, dr))
+    ]
     data = []
     indexes = []
     for p in paths:
