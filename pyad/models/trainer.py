@@ -182,9 +182,11 @@ class ModuleTrainer:
         multi_eval_df = pd.DataFrame.from_dict(self.results).T
         multi_eval_save_dir = os.path.join(self.save_dir, self.now)
         mkdir_if_not_exists(multi_eval_save_dir)
-        multi_eval_df.to_csv(
-            os.path.join(multi_eval_save_dir, self.multi_eval_results_fname)
-        )
+        p = os.path.join(multi_eval_save_dir, self.multi_eval_results_fname)
+        try:
+            multi_eval_df.to_csv(p)
+        except PermissionError as e:
+            print("could not save {} with exception {}".format(p, e))
         return multi_eval_df
 
     def save_model(
