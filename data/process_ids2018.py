@@ -110,7 +110,8 @@ def clean_invalid(df: pd.DataFrame, stats: dict) -> Tuple[pd.DataFrame, dict]:
     print("Replaced {:2.4f}% of original data".format(ratio))
     remaining_nans = df.isna().sum().sum()
     assert remaining_nans == 0, "There are still {} NaN values".format(remaining_nans)
-
+    remaining_inf = df.isinf().sum().sum()
+    assert remaining_inf == 0, "There are still {} INF values".format(remaining_inf)
     return df, stats
 
 
@@ -145,7 +146,7 @@ def clean_negative(df: pd.DataFrame, stats: dict) -> Tuple[pd.DataFrame, dict]:
     n_dropped = len(idx_to_drop)
     stats["n_dropped_rows"] += n_dropped
     df = df.drop(idx_to_drop, axis=0)
-    print("Dropped {} rows".format(n_dropped))
+    print("Dropped {} rows (negative values for normal data)".format(n_dropped))
     assert (df[num_cols] < 0).any(1).sum() == 0, "There are still negative values"
     print("There are no more negative values")
     n_anom_after = (df["Label"] != NORMAL_CAT).sum()

@@ -11,6 +11,7 @@ def parse_args() -> Namespace:
     parser.add_argument("--config_root", type=str)
     parser.add_argument("--template", type=str, help="path to latex template")
     parser.add_argument("--table_caption", type=str, default="")
+    parser.add_argument("--folders", type=List[str], default=None)
     parser.add_argument("--models", type=List[str], default=None)
 
     return parser.parse_args()
@@ -50,7 +51,8 @@ def get_init_args(
         config_folders: List[str],
         data_fname: str,
         key: str,
-        columns: List[str] = None
+        include: List[str] = None,
+        exclude: List[str] = None
 ) -> dict:
     cfg = {}
     for path in config_folders:
@@ -60,8 +62,11 @@ def get_init_args(
         with open(path_to_params, "r") as f:
             params = yaml.safe_load(f)
             params = params[key]["init_args"]
-            if columns is not None:
-                cfg[dataset_name] = {k: params.get(k) for k in columns}
+            if include is not None:
+                cfg[dataset_name] = {k: params.get(k) for k in include}
+            elif exclude is not None:
+                to_include = list(set(params) - set(exclude))
+                cfg[dataset_name] = {k: params.get(k) for k in to_include}
             else:
                 cfg[dataset_name] = params
     return cfg
@@ -90,17 +95,22 @@ def resolve_models(config_folders: List[str]) -> List[str]:
 
 def main():
     args = parse_args()
-    config_folders = list(map(lambda x: os.path.join(args.config_root, x), os.listdir(args.config_root)))
+    if args.folders:
+        config_folders = list(map(lambda x: os.path.join(args.config_root, x), args.folders))
+    else:
+        config_folders = list(map(lambda x: os.path.join(args.config_root, x), os.listdir(args.config_root)))
     models = args.models or resolve_models(config_folders)
     for model_name in models:
-        trainer_params = get_init_args(config_folders, "_trainer.yaml", "trainer", ["max_epochs", "n_runs"])
-        data_params = get_init_args(config_folders, "_data.yaml", "data", ["batch_size", "scaler"])
-        model_params = get_init_args(config_folders, "%s.yaml" % model_name, "model")
+        trainer_params = get_init_args(config_folders, "_trainer.yaml", "trainer", include=["max_epochs"])
+        data_params = get_init_args(config_folders, "_data.yaml", "data", include=["batch_size", "scaler"])
+        model_params = get_init_args(config_folders, "%s.yaml" % model_name, "model", exclude=["trainer", "data"])
         structure = merge_configs(trainer_params, data_params, model_params)
         table_caption = "%s hyperparameters" % model_name
-        param_keys = list(
-            x.replace("_", " ") for x in model_params[next(iter(model_params))].keys()
-        )
+        param_keys = ["dataset"]
+        for d in [trainer_params, data_params, model_params]:
+            param_keys.extend(list(
+                x.replace("_", " ") for x in d[next(iter(d))].keys()
+            ))
         buf = config2tex(
             path_to_template=args.template,
             model_params=param_keys,
