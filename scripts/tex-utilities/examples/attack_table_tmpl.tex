@@ -1,0 +1,18 @@
+\begin{table*}[!tbp]
+    \tiny
+\centering
+\begin{tabular}{\VAR{column_positions}}
+    \BLOCK{ for header_name in headers } \BLOCK{ if not loop.first }&\BLOCK{ endif } \VAR{header_name} \BLOCK{ endfor } \\
+\hline
+    \BLOCK{ for attack_type, datasets_dict in structure.items() }
+    \VAR{attack_type} &\BLOCK{ for dataset_name, results in datasets_dict.items() }\BLOCK{if loop.last}&\BLOCK{endif} \VAR{dataset_name|upper} & \BLOCK{for r in results}\VAR{r.get("avg")} $\pm$ \VAR{r.get("std")} \BLOCK{ if not loop.last }& \BLOCK{ endif }\BLOCK{ endfor }\BLOCK{ if not loop.last } \Tstrut \\
+    \BLOCK{ else } \Bstrut \\
+    \BLOCK{ endif }
+    \BLOCK{ endfor }
+    \hline
+    \BLOCK{ endfor }
+\multicolumn{9}{p{.7\textwidth}}{*labels exclusive to IDS2017}
+\end{tabular}
+\caption{Average class-level accuracy with standard deviation on IDS2017 and IDS2018. For each label, the best result is displayed in bold.}
+\label{tab:multiclass-results}
+\end{table*}
