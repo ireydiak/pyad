@@ -106,11 +106,14 @@ def main():
         model_params = get_init_args(config_folders, "%s.yaml" % model_name, "model", exclude=["trainer", "data"])
         structure = merge_configs(trainer_params, data_params, model_params)
         table_caption = "%s hyperparameters" % model_name
-        param_keys = ["dataset"]
+        param_keys = ["Dataset"]
         for d in [trainer_params, data_params, model_params]:
             param_keys.extend(list(
                 x.replace("_", " ") for x in d[next(iter(d))].keys()
             ))
+        # put first letter uppercase
+        param_keys = [s[0].upper() + s[1:] for s in param_keys]
+
         buf = config2tex(
             path_to_template=args.template,
             model_params=param_keys,

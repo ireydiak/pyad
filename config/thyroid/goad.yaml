@@ -3,16 +3,17 @@ model:
   init_args:
     weight_decay: 1e-4
     lr: 1e-4
-    n_epochs: 1
     n_transforms: 256
     feature_dim: 32
     num_hidden_nodes: 8
     batch_size: 128
-    n_layers: 0
+    n_layers: 1
     eps: 0
     lamb: 0.1
     margin: 1
+data:
+  init_args:
+    scaler: standard
 trainer:
   init_args:
-    max_epochs: 1
-    scaler: None
+    max_epochs: 25

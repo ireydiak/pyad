@@ -1,7 +1,7 @@
 model:
   class_path: pyad.models.density.DAGMM
   init_args:
-    n_mixtures: 2
+    n_mixtures: 4
     gmm_hidden_dims:
     - 10
     latent_dim: 1
