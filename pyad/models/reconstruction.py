@@ -86,7 +86,7 @@ class AutoEncoder(BaseModule):
     def training_step(self, X: torch.Tensor, y: torch.Tensor = None, labels: torch.Tensor = None):
         emb = self.encoder(X)
         X_hat = self.decoder(emb)
-        loss = self.compute_loss(X_hat, X=X_hat, emb=emb)
+        loss = self.compute_loss(X_hat, X=X, emb=emb)
         return loss
 
 

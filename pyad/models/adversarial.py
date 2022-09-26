@@ -133,9 +133,6 @@ class ALAD(BaseModule):
         return loss_g
 
     def training_step(self, X: torch.Tensor, y: torch.Tensor = None, labels: torch.Tensor = None):
-        # # manual optimization: fetch optimizers
-        # g_opt, d_opt = self.optimizers()
-
         X_g, X_d = X.to(self.device).float(), X.clone().to(self.device).float()
 
         # Forward pass
@@ -143,25 +140,11 @@ class ALAD(BaseModule):
         loss_d = self.compute_d_loss(X_d)
 
         return loss_g, loss_d
-        # # Optimize generator
-        # g_opt.zero_grad()
-        # self.manual_backward(loss_g)
-        # g_opt.step()
-        #
-        # # Optimize discriminator
-        # d_opt.zero_grad()
-        # self.manual_backward(loss_d)
-        # d_opt.step()
-        #
-        # # log both losses
-        # self.log_dict({
-        #     "g_loss": loss_g.item(),
-        #     "d_loss": loss_d.item()
-        # })
 
     def configure_optimizers(self):
         optim_ge = torch.optim.Adam(
             list(self.G.parameters()) + list(self.E.parameters()),
+            weight_decay=self.weight_decay,
             lr=self.lr, betas=(0.5, 0.999)
         )
         optim_d = torch.optim.Adam(
@@ -169,6 +152,7 @@ class ALAD(BaseModule):
             list(self.D_zz.parameters()) +
             list(self.D_xx.parameters()),
             lr=self.lr,
+            weight_decay=self.weight_decay,
             betas=(0.5, 0.999)
         )
         return (optim_ge, optim_d), None
