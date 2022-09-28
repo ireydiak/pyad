@@ -91,14 +91,14 @@ class DSEBM(BaseModule):
 
         return energy
 
-    def compute_loss(self, outputs: torch.Tensor, **kwargs):
+    def compute_loss(self, outputs: torch.Tensor, y: torch.Tensor = None, **kwargs):
         X = kwargs.get("X")
         out = torch.square(X - outputs)
         out = torch.sum(out, dim=-1)
         out = torch.mean(out)
         return out
 
-    def score(self, X: torch.Tensor, y: torch.Tensor = None, labels: torch.Tensor = None):
+    def score(self, X: torch.Tensor, y: torch.Tensor = None):
         # TODO: add support for multi-score
         if self.score_metric == "energy":
             # Evaluation of the score based on the energy
@@ -122,7 +122,7 @@ class DSEBM(BaseModule):
             scores = rec_errs
         return scores
 
-    def training_step(self, X: torch.Tensor, y: torch.Tensor = None, labels: torch.Tensor = None):
+    def training_step(self, X: torch.Tensor, y: torch.Tensor = None):
         # add noise to input data
         noise = self.random_noise_like(X).to(self.device)
         X_noise = X + noise
@@ -135,7 +135,7 @@ class DSEBM(BaseModule):
         dEn_dX = torch.autograd.grad(energy_noise, X_noise, retain_graph=True, create_graph=True)
         fx_noise = (X_noise - dEn_dX[0])
 
-        return self.compute_loss(fx_noise, X=X)
+        return self.compute_loss(fx_noise, y, X=X)
 
     def on_test_model_eval(self) -> None:
         torch.set_grad_enabled(True)
@@ -256,7 +256,7 @@ class DAGMM(BaseModule):
         gamma_hat = self.softmax(gamma_hat)
         return gamma_hat
 
-    def training_step(self, X: torch.Tensor, y: torch.Tensor = None, labels: torch.Tensor = None):
+    def training_step(self, X: torch.Tensor, y: torch.Tensor = None):
         # forward pass:
         # - embed and reconstruct original sample
         # - create new feature matrix from embeddings and reconstruction error
@@ -271,10 +271,10 @@ class DAGMM(BaseModule):
         self.phi = torch.nn.Parameter(phi)
         self.mu = torch.nn.Parameter(mu)
         self.cov_mat = torch.nn.Parameter(cov_mat)
-        loss = self.compute_loss(x_prime, X=X, energy=energy_result, pen_cov_mat=pen_cov_mat)
+        loss = self.compute_loss(x_prime, y, X=X, energy=energy_result, pen_cov_mat=pen_cov_mat)
         return loss
 
-    def compute_loss(self, outputs: torch.Tensor, **kwargs):
+    def compute_loss(self, outputs: torch.Tensor, y: torch.Tensor = None, **kwargs):
         X, energy, pen_cov_mat = kwargs.get("X"), kwargs.get("energy"), kwargs.get("pen_cov_mat")
         rec_err = (X - outputs) ** 2
         loss = rec_err.mean() + (self.lamb_1 / self.n_instances) * energy + self.lamb_2 * pen_cov_mat
@@ -389,7 +389,7 @@ class DAGMM(BaseModule):
 
         return energy_result, pen_cov_mat
 
-    def score(self, X: torch.Tensor, y: torch.Tensor = None, labels: torch.Tensor = None):
+    def score(self, X: torch.Tensor, y: torch.Tensor = None):
         _, _, z, _ = self.forward(X)
         energy, _ = self.estimate_sample_energy(z, average_energy=False)
         return energy
@@ -488,7 +488,7 @@ class SOMDAGMM(BaseModule):
     def print_name(self) -> str:
         return "SOM-DAGMM"
 
-    def score(self, X: torch.Tensor, y: torch.Tensor = None, labels: torch.Tensor = None):
+    def score(self, X: torch.Tensor, y: torch.Tensor = None):
         _, _, _, Z, _ = self(X)
         energy, _ = self.dagmm.estimate_sample_energy(Z, average_energy=False)
         return energy
@@ -542,7 +542,7 @@ class SOMDAGMM(BaseModule):
 
         return emb, X_hat, cosim, Z, gamma
 
-    def training_step(self, X: torch.Tensor, y: torch.Tensor = None, labels: torch.Tensor = None):
+    def training_step(self, X: torch.Tensor, y: torch.Tensor = None):
         _, X_hat, _, Z, gamma_hat = self(X)
         phi, mu, cov_mat = self.dagmm.compute_params(Z, gamma_hat)
         energy_result, pen_cov_mat = self.dagmm.estimate_sample_energy(
@@ -551,9 +551,9 @@ class SOMDAGMM(BaseModule):
         self.dagmm.phi = torch.nn.Parameter(phi)
         self.dagmm.mu = torch.nn.Parameter(mu)
         self.dagmm.cov_mat = torch.nn.Parameter(cov_mat)
-        return self.compute_loss(X_hat, X=X, energy=energy_result, Sigma=pen_cov_mat)
+        return self.compute_loss(X_hat, y, X=X, energy=energy_result, Sigma=pen_cov_mat)
 
-    def compute_loss(self, outputs: torch.Tensor, **kwargs):
+    def compute_loss(self, outputs: torch.Tensor, y: torch.Tensor = None, **kwargs):
         X, energy, Sigma = kwargs.get("X"), kwargs.get("energy"), kwargs.get("Sigma")
         rec_loss = ((X - outputs) ** 2).mean()
         sample_energy = self.dagmm.lamb_1 * energy

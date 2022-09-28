@@ -62,15 +62,15 @@ class BaseModule(nn.Module):
         pass
 
     @abstractmethod
-    def training_step(self, X: torch.Tensor, y: torch.Tensor = None, labels: torch.Tensor = None):
+    def training_step(self, X: torch.Tensor, y: torch.Tensor = None):
         pass
 
     @abstractmethod
-    def score(self, X: torch.Tensor, y: torch.Tensor = None, labels: torch.Tensor = None):
+    def score(self, X: torch.Tensor, y: torch.Tensor = None):
         pass
 
     @abstractmethod
-    def compute_loss(self, outputs: torch.Tensor, **kwargs):
+    def compute_loss(self, outputs: torch.Tensor, y: torch.Tensor, **kwargs):
         pass
 
     @abstractmethod

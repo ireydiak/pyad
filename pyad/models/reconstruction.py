@@ -72,21 +72,40 @@ class AutoEncoder(BaseModule):
         X_hat = self.decoder(emb)
         return X_hat
 
-    def compute_loss(self, outputs: torch.Tensor, **kwargs):
+    def compute_loss(self, outputs: torch.Tensor, y: torch.Tensor, **kwargs):
         X = kwargs.get("X")
         emb = kwargs.get("emb")
         loss = ((X - outputs) ** 2).sum(axis=-1).mean() + self.reg * emb.norm(2, dim=1).mean()
         return loss
 
-    def score(self, X: torch.Tensor, y: torch.Tensor = None, labels: torch.Tensor = None) -> torch.Tensor:
+    def score(self, X: torch.Tensor, y: torch.Tensor = None) -> torch.Tensor:
         X_hat = self(X)
         score = ((X - X_hat) ** 2).sum(axis=-1)
         return score
 
-    def training_step(self, X: torch.Tensor, y: torch.Tensor = None, labels: torch.Tensor = None):
+    def training_step(self, X: torch.Tensor, y: torch.Tensor = None):
         emb = self.encoder(X)
         X_hat = self.decoder(emb)
-        loss = self.compute_loss(X_hat, X=X, emb=emb)
+        loss = self.compute_loss(X_hat, y, X=X, emb=emb, y=y)
+        return loss
+
+
+class OEAutoEncoder(AutoEncoder):
+
+    def print_name(self) -> str:
+        return "OEAutoEncoder"
+
+    def forward(self, X: torch.Tensor):
+        emb = self.encoder(X)
+        X_hat = self.decoder(emb)
+        return X_hat
+
+    def compute_loss(self, outputs: torch.Tensor, y: torch.Tensor, **kwargs):
+        X = kwargs.get("X")
+        emb = kwargs.get("emb")
+        reg = self.reg * emb.norm(2, dim=1).mean()
+        l2 = ((X - outputs) ** 2).sum(axis=-1)
+        loss = (((1 - y) * l2) + (y * 1/l2)).mean() + reg
         return loss
 
 
@@ -146,7 +165,7 @@ class MemAE(BaseModule):
     def print_name(self) -> str:
         return "MemAE"
 
-    def compute_loss(self, outputs: torch.Tensor, **kwargs):
+    def compute_loss(self, outputs: torch.Tensor, y: torch.Tensor = None, **kwargs):
         X, W_hat = kwargs.get("X"), kwargs.get("W_hat")
         R = self.recon_loss_fn(X, outputs)
         E = self.entropy_loss_fn(W_hat)
@@ -159,11 +178,11 @@ class MemAE(BaseModule):
         f_d = self.decoder(f_mem)
         return f_d, att
 
-    def training_step(self, X: torch.Tensor, y: torch.Tensor = None, labels: torch.Tensor = None):
+    def training_step(self, X: torch.Tensor, y: torch.Tensor = None):
         X_hat, W_hat = self(X)
-        return self.compute_loss(X_hat, X=X, W_hat=W_hat)
+        return self.compute_loss(X_hat, y, X=X, W_hat=W_hat)
 
-    def score(self, X: torch.Tensor, y: torch.Tensor = None, labels: torch.Tensor = None):
+    def score(self, X: torch.Tensor, y: torch.Tensor = None):
         X_hat, _ = self.forward(X)
         return torch.sum((X - X_hat) ** 2, dim=1)
 

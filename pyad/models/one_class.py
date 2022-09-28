@@ -93,20 +93,20 @@ class DeepSVDD(BaseModule):
         center = self.init_center_c(dataloader).to(self.device)
         self.center = center
 
-    def score(self, X: torch.Tensor, y: torch.Tensor = None, labels: torch.Tensor = None):
+    def score(self, X: torch.Tensor, y: torch.Tensor = None):
         assert torch.allclose(self.center, torch.zeros_like(self.center)) is False, "center not initialized"
         outputs = self.net(X)
         if self.center.device != outputs.device:
             self.center = self.center.to(outputs.device)
         return torch.sum((outputs - self.center) ** 2, dim=1)
 
-    def compute_loss(self, outputs: torch.Tensor, **kwargs):
+    def compute_loss(self, outputs: torch.Tensor, y: torch.Tensor = None, **kwargs):
         loss = torch.sum((outputs - self.center) ** 2, dim=1)
         return loss.mean()
 
-    def training_step(self, X: torch.Tensor, y: torch.Tensor = None, labels: torch.Tensor = None):
+    def training_step(self, X: torch.Tensor, y: torch.Tensor = None):
         outputs = self.net(X)
-        loss = self.compute_loss(outputs)
+        loss = self.compute_loss(outputs, y)
         return loss
 
     def configure_optimizers(self):
@@ -203,7 +203,7 @@ class DROCC(BaseModule):
         logits = self.classifier(features.view(-1, self.n_hidden_nodes))
         return logits
 
-    def score(self, X: torch.Tensor, y: torch.Tensor = None, labels: torch.Tensor = None):
+    def score(self, X: torch.Tensor, y: torch.Tensor = None):
         logits = self.forward(X)
         logits = logits.squeeze(dim=1)
         return logits
@@ -213,8 +213,8 @@ class DROCC(BaseModule):
         self.epoch_adv_loss = torch.tensor([0]).float().to(self.device)  # AdvLoss
         self.epoch_ce_loss = 0  # Cross entropy Loss
 
-    def compute_loss(self, outputs: torch.Tensor, **kwargs):
-        X, y = kwargs.get("X"), kwargs.get("y")
+    def compute_loss(self, outputs: torch.Tensor, y: torch.Tensor = None, **kwargs):
+        X = kwargs.get("X")
         # cross entropy loss
         ce_loss = F.binary_cross_entropy_with_logits(outputs, y)
         self.epoch_ce_loss += ce_loss
@@ -296,10 +296,10 @@ class DROCC(BaseModule):
 
         return adv_loss
 
-    def training_step(self, X: torch.Tensor, y: torch.Tensor = None, labels: torch.Tensor = None):
+    def training_step(self, X: torch.Tensor, y: torch.Tensor = None):
         # Extract the logits for cross entropy loss
         logits = self.score(X)
-        loss = self.compute_loss(logits, X=X, y=y)
+        loss = self.compute_loss(logits, y, X=X)
         return loss
 
     def configure_optimizers(self):

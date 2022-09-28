@@ -128,7 +128,7 @@ class GOAD(BaseModule):
         logits = self.head(tc)
         return tc, logits
 
-    def score(self, X: torch.Tensor, y: torch.Tensor = None, labels: torch.Tensor = None):
+    def score(self, X: torch.Tensor, y: torch.Tensor = None):
         diffs = ((X.unsqueeze(2) - self.centers) ** 2).sum(-1)
         diffs_eps = self.eps * torch.ones_like(diffs)
         diffs = torch.max(diffs, diffs_eps)
@@ -148,7 +148,7 @@ class GOAD(BaseModule):
         scores = self.score(zs)
         return scores
 
-    def training_step(self, X: torch.Tensor, y: torch.Tensor = None, labels: torch.Tensor = None):
+    def training_step(self, X: torch.Tensor, y: torch.Tensor = None):
         # transformation labels
         labels = torch.arange(
             self.n_transforms
@@ -165,11 +165,11 @@ class GOAD(BaseModule):
         # Update batch count for computing centers means
         self.n_batch += 1
         # Compute loss
-        loss = self.compute_loss(logits, labels=labels, tc_zs=tc_zs)
+        loss = self.compute_loss(logits, y, labels=labels, tc_zs=tc_zs)
 
         return loss
 
-    def compute_loss(self, outputs, **kwargs):
+    def compute_loss(self, outputs: torch.Tensor, y: torch.Tensor = None, **kwargs):
         labels = kwargs.get("labels")
         tc_zs = kwargs.get("tc_zs")
         ce_loss = self.ce_loss(outputs, labels)
@@ -299,7 +299,7 @@ class NeuTraLAD(BaseModule):
 
         return emb
 
-    def compute_loss(self, outputs: torch.Tensor, **kwargs):
+    def compute_loss(self, outputs: torch.Tensor, y: torch.Tensor=None, **kwargs):
         logits = F.normalize(outputs, p=2, dim=-1)
         emb_ori = logits[:, 0]
         emb_trans = logits[:, 1:]
@@ -328,15 +328,15 @@ class NeuTraLAD(BaseModule):
 
         return loss.sum(1)
 
-    def training_step(self, X: torch.Tensor, y: torch.Tensor = None, labels: torch.Tensor = None):
+    def training_step(self, X: torch.Tensor, y: torch.Tensor = None):
         emb = self(X)
-        loss = self.compute_loss(emb)
+        loss = self.compute_loss(emb, y)
         loss = loss.mean()
         return loss
 
-    def score(self, X: torch.Tensor, y: torch.Tensor = None, labels: torch.Tensor = None):
+    def score(self, X: torch.Tensor, y: torch.Tensor = None):
         emb = self(X)
-        scores = self.compute_loss(emb)
+        scores = self.compute_loss(emb, y)
         return scores
 
     def _computeH_ij(self, Z):
@@ -383,3 +383,39 @@ class NeuTraLAD(BaseModule):
         X_t_s = torch.stack(X_t_s, dim=0)
 
         return X_t_s
+
+
+@MODEL_REGISTRY
+class OENeuTraLAD(NeuTraLAD):
+
+    def print_name(self) -> str:
+        return "OE-NeuTraLAD"
+
+    def compute_loss(self, outputs: torch.Tensor, y: torch.Tensor, **kwargs):
+        logits = F.normalize(outputs, p=2, dim=-1)
+        emb_ori = logits[:, 0]
+        emb_trans = logits[:, 1:]
+        batch_size, n_transforms, latent_dim = logits.shape
+
+        sim_matrix = torch.exp(
+            torch.matmul(
+                logits,
+                logits.permute(0, 2, 1) / self.temperature
+            )
+        )
+        mask = (torch.ones_like(sim_matrix).to(self.device) - torch.eye(n_transforms).unsqueeze(0).to(
+            self.device)).bool()
+        sim_matrix = sim_matrix.masked_select(mask).view(batch_size, n_transforms, -1)
+        trans_matrix = sim_matrix[:, 1:].sum(-1)
+
+        pos_sim = torch.exp(
+            torch.sum(emb_trans * emb_ori.unsqueeze(1), -1) / self.temperature
+        )
+        K = n_transforms - 1
+        scale = 1 / np.abs(K * np.log(1. / K))
+
+        scores = trans_matrix - torch.log(pos_sim)
+        loss = ( ((1-y) * torch.log(scores)) + (y * torch.log(1 - scores)) ) * scale
+
+        return loss.sum(1)
+

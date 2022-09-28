@@ -73,7 +73,7 @@ class ALAD(BaseModule):
     def compute_loss(self, outputs: torch.Tensor, **kwargs):
         pass
 
-    def score(self, X: torch.Tensor, y: torch.Tensor = None, labels: torch.Tensor = None):
+    def score(self, X: torch.Tensor, y: torch.Tensor = None):
         _, feature_real = self.D_xx(X, X)
         _, feature_gen = self.D_xx(X, self.G(self.E(X)))
         return torch.linalg.norm(feature_real - feature_gen, 2, keepdim=False, dim=1)
@@ -132,7 +132,7 @@ class ALAD(BaseModule):
 
         return loss_g
 
-    def training_step(self, X: torch.Tensor, y: torch.Tensor = None, labels: torch.Tensor = None):
+    def training_step(self, X: torch.Tensor, y: torch.Tensor = None):
         X_g, X_d = X.to(self.device).float(), X.clone().to(self.device).float()
 
         # Forward pass
