@@ -236,7 +236,7 @@ class ModuleTrainer:
         # clear gradients
         self.optimizer.zero_grad()
         # compute forward pass
-        loss = model.training_step(X, y, None)
+        loss = model.training_step(X, y)
         # compute backward pass
         loss.backward()
         # update parameters
@@ -283,7 +283,7 @@ class ModuleTrainer:
                         model, run_number, epoch, os.path.join(ckpt_path, ckpt_fname)
                     )
 
-    def run_experiments(self, model_cfg: dict, data: TabularDataset) -> None:
+    def run_experiments(self, model_cfg: dict, data: TabularDataset, debug: bool = False) -> None:
         # setup
         self.setup_results()
         normal_str_repr = data.normal_str_repr
@@ -334,9 +334,10 @@ class ModuleTrainer:
             for metric, value in self.results["test_only_optimal"].items():
                 self.logger.log_metric("eval/" + metric, value[run])
         self.logger.cleanup()
-        self.aggregate_and_save_results(model.get_params(), data.get_params())
+        if debug is False:
+            self.aggregate_and_save_results(model.get_params(), data.get_params())
         # save model
-        if self.enable_checkpoints:
+        if self.enable_checkpoints and debug is False:
             model_path = os.path.join("models", dataset_name)
             mkdir_if_not_exists(model_path)
             self.save_model(

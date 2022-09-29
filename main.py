@@ -10,7 +10,8 @@ from pyad.utilities import instantiate_class
 def fit(
         model_cfg: dict,
         trainer: ModuleTrainer,
-        data: TabularDataset
+        data: TabularDataset,
+        debug: bool = False
 ):
     # setup
     dataset_name = data.name.lower()
@@ -22,7 +23,7 @@ def fit(
     # update trainer
     trainer.save_dir = save_dir
     # start training
-    trainer.run_experiments(model_cfg, data)
+    trainer.run_experiments(model_cfg, data, debug=debug)
 
 
 def test(
@@ -55,10 +56,13 @@ def test(
 def main(cli):
     args = cli()
     if args.method == "fit":
+        if args.debug:
+            print("DEBUG MODE ACTIVATED: checkpoints and results won't be stored")
         fit(
             model_cfg=args.model,
             trainer=args.trainer,
-            data=args.data
+            data=args.data,
+            debug=args.debug
         )
     elif args.method == "test":
         test(

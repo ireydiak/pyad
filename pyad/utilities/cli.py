@@ -90,6 +90,7 @@ class CLI:
         self.parser.add_argument("method", type=str, default="fit")
         self.parser.add_argument("--model", type=dict)
         self.parser.add_argument("--trainer", type=dict)
+        self.parser.add_argument("--debug", action="store_true")
         self.parser.add_class_arguments(TabularDataset, "data.init_args")
         self.parser.add_argument("--config", action=ActionConfigFile)
 
